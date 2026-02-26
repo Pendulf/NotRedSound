@@ -161,28 +161,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
 
                   const SizedBox(height: 16),
-
-                  // Информация
-                  Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Column(
-                      children: [
-                        Text(
-                          'Длительность такта: ${(60.0 / tempBpm * 4).toStringAsFixed(2)} сек',
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Всего времени: ${(60.0 / tempBpm * 4 * tempBars).toStringAsFixed(2)} сек',
-                          style: const TextStyle(color: Colors.white70),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
               actions: [

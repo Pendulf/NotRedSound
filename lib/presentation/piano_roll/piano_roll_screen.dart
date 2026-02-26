@@ -24,6 +24,9 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   final AudioService _audioService = AudioService();
   bool _isPlaying = false;
   String _currentInstrument = 'Piano';
+  
+  // Новая переменная для хранения выбранной длительности ноты (в тиках)
+  int _selectedNoteDuration = 4; // По умолчанию 4/16 (четверть)
 
   // Два отдельных контроллера
   late ScrollController _timeScaleController;
@@ -46,6 +49,40 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
     'Арфа',
     'Синт',
     'Барабаны',
+  ];
+
+  // Конфигурация длительностей нот
+  final List<Map<String, dynamic>> _noteDurations = [
+    {
+      'label': '1/16',
+      'value': 1,
+      'icon': Icons.looks_one,
+      'description': 'Шестнадцатая',
+    },
+    {
+      'label': '1/8',
+      'value': 2,
+      'icon': Icons.looks_two,
+      'description': 'Восьмая',
+    },
+    {
+      'label': '1/4',
+      'value': 4,
+      'icon': Icons.looks_3,
+      'description': 'Четверть',
+    },
+    {
+      'label': '1/2',
+      'value': 8,
+      'icon': Icons.looks_4,
+      'description': 'Половинная',
+    },
+    {
+      'label': '1/1',
+      'value': 16,
+      'icon': Icons.looks_5,
+      'description': 'Целая',
+    },
   ];
 
   @override
@@ -313,19 +350,20 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         currentTrack.notes.removeAt(existingNoteIndex);
         debugPrint('🗑️ Удалена нота: $midiNote на тике $tick');
       } else {
+        // Используем выбранную длительность
         currentTrack.notes.add(
           MidiNote(
             pitch: midiNote,
             startTick: tick,
-            durationTicks: 4,
+            durationTicks: _selectedNoteDuration,
           ),
         );
-        debugPrint('➕ Добавлена нота: $midiNote на тике $tick');
+        debugPrint('➕ Добавлена нота: $midiNote на тике $tick, длительность: $_selectedNoteDuration тиков');
 
         // Играем ноту для предпросмотра
         _audioService.playNote(midiNote);
-        // Останавливаем через 200 мс
-        Future.delayed(const Duration(milliseconds: 200), () {
+        // Останавливаем через время, соответствующее длительности
+        Future.delayed(Duration(milliseconds: _selectedNoteDuration * AppConstants.millisecondsPerTick), () {
           _audioService.stopNote(midiNote);
         });
       }
@@ -425,6 +463,69 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         tooltip: _isPlaying ? 'Стоп' : 'Воспроизвести',
         padding: EdgeInsets.zero,
         splashRadius: 20,
+      ),
+    );
+  }
+
+  // BottomNavigationBar для выбора длительности ноты
+  Widget _buildNoteDurationBar() {
+    return Container(
+      height: 70,
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: currentTrack.color.withValues(alpha: 0.5)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: _noteDurations.map((duration) {
+          final isSelected = _selectedNoteDuration == duration['value'];
+          return Expanded(
+            child: GestureDetector(
+              onTap: () {
+                setState(() {
+                  _selectedNoteDuration = duration['value'];
+                });
+                _showSnackBar(
+                  'Длительность: ${duration['description']}', 
+                  currentTrack.color,
+                );
+              },
+              child: Container(
+                margin: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: isSelected 
+                      ? currentTrack.color.withValues(alpha: 0.3)
+                      : Colors.transparent,
+                  borderRadius: BorderRadius.circular(8),
+                  border: isSelected
+                      ? Border.all(color: currentTrack.color, width: 2)
+                      : null,
+                ),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      duration['icon'],
+                      color: isSelected ? currentTrack.color : Colors.grey[400],
+                      size: 24,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      duration['label'],
+                      style: TextStyle(
+                        color: isSelected ? currentTrack.color : Colors.grey[400],
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -667,8 +768,10 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
               ),
             ),
 
-            const SizedBox(height: 12),
+            // Bottom bar для выбора длительности ноты
+            _buildNoteDurationBar(),
 
+            const SizedBox(height: 12),
           ],
         ),
       ),
