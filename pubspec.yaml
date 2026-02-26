@@ -1,0 +1,50 @@
+name: not_red_sound
+description: "MIDI Score Writer - создание нот и экспорт в FL Studio"
+publish_to: 'none'
+version: 0.1.0
+
+environment:
+  sdk: ">=3.2.0 <4.0.0"  
+
+dependencies:
+  flutter:
+    sdk: flutter
+  
+  # MIDI обработка
+  midi_util: ^1.0.2
+  flutter_midi_engine: ^0.1.2
+  
+  # Хранение данных
+  shared_preferences: ^2.3.5
+  path_provider: ^2.1.5
+  
+  # UI компоненты и состояние
+  provider: ^6.1.2
+  
+  # Экспорт и шаринг файлов
+  share_plus: ^10.1.4
+  file_picker: ^8.1.7
+  archive: ^3.4.10
+  
+  # Для работы с файловой системой
+  permission_handler: ^11.3.1
+  
+  # Для красивого UI
+  google_fonts: ^6.2.1
+  flutter_svg: ^2.0.17
+  
+  # Аудио воспроизведение (опционально)
+  audioplayers: ^6.2.0
+  
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/background.jpg
+    - assets/sounds/FluidR3_GM.sf2
