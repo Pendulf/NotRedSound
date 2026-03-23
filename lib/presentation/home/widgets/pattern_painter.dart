@@ -8,6 +8,7 @@ class PatternPainter extends CustomPainter {
   final double previewHeight;
   final int minNote;
   final int maxNote;
+  final int ticksPerBar; // Добавляем параметр для тиков в такте
 
   PatternPainter({
     required this.notes,
@@ -16,6 +17,7 @@ class PatternPainter extends CustomPainter {
     required this.previewHeight,
     required this.minNote,
     required this.maxNote,
+    required this.ticksPerBar, // Новый параметр
   });
 
   @override
@@ -28,10 +30,16 @@ class PatternPainter extends CustomPainter {
 
     for (final note in notes) {
       final double normalizedY = _normalizeNotePosition(note.pitch);
-      final double notePosition = (note.startTick % 16) / 16;
-      final double noteX = notePosition * barWidth;
-      final double noteWidth = (note.durationTicks / 16) * barWidth;
+      
+      // Вычисляем относительную позицию в пределах такта (0-1)
+      final double relativePosition = (note.startTick % ticksPerBar) / ticksPerBar;
+      final double noteX = relativePosition * barWidth;
+      
+      // Длительность ноты: делим на 4 (используем ticksPerBar * 4 для 4-кратного уменьшения)
+      final double noteWidth = (note.durationTicks / ticksPerBar.toDouble()) * barWidth ;
       final double noteHeight = previewHeight / (maxNote - minNote + 1) * 0.8;
+
+
 
       canvas.drawRRect(
         RRect.fromRectAndRadius(

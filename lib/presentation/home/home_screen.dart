@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../data/models/track_model.dart';
+import '../../data/models/pattern_segment.dart';
 import '../../data/repositories/track_repository.dart';
 import '../piano_roll/piano_roll_screen.dart';
 import '../../core/constants/app_constants.dart';
@@ -17,6 +20,11 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late HomeController _controller;
   late TrackRepository _repository;
+  
+  // Состояние для сегментов
+  PatternSegment? _selectedSegment;
+  String? _selectedTrackId;
+  Timer? _segmentClearTimer;
 
   @override
   void initState() {
@@ -34,16 +42,16 @@ class _HomeScreenState extends State<HomeScreen> {
     _calculateBarWidth();
   }
 
-  void _calculateBarWidth() {
-    final screenWidth = MediaQuery.of(context).size.width;
-    // Хотим видеть примерно 4 такта на экране
-    AppConstants.barWidth = (screenWidth - 100) / 4;
-  }
-
   @override
   void dispose() {
+    _segmentClearTimer?.cancel();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _calculateBarWidth() {
+    final screenWidth = MediaQuery.of(context).size.width;
+    AppConstants.barWidth = (screenWidth - 100) / 4;
   }
 
   void _openPianoRoll(Track track) {
@@ -65,6 +73,67 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
+  // Обработка долгого нажатия на такт
+  void _onBarLongPress(Track track, int barIndex) {
+    // Создаем сегмент из текущего такта
+    final segment = _controller.createSegmentFromBars(track.id, barIndex, 1);
+    
+    if (segment != null) {
+      // Отменяем предыдущий таймер если есть
+      _segmentClearTimer?.cancel();
+      
+      setState(() {
+        _selectedSegment = segment;
+        _selectedTrackId = track.id;
+        _controller.setTrackSegment(track.id, segment);
+      });
+      
+      _showSnackBar(
+        '✅ Сегмент создан! Нажмите на пустой такт для вставки',
+        Colors.green,
+        duration: const Duration(seconds: 2),
+      );
+      
+      // Автоматически снимаем выделение через 3 секунды
+      _segmentClearTimer = Timer(const Duration(seconds: 3), () {
+        if (mounted && _selectedSegment != null) {
+          setState(() {
+            _clearSelectedSegment();
+          });
+          _showSnackBar('⌛️ Выделение сегмента снято', Colors.grey);
+        }
+      });
+    } else {
+      _showSnackBar('⚠️ Нет нот в этом такте', Colors.orange);
+    }
+  }
+  
+  // Обработка нажатия на такт с сегментом
+  void _onBarTapWithSegment(Track track, int barIndex) {
+    if (_selectedSegment != null && _selectedTrackId == track.id) {
+      _controller.copySegmentToBar(track.id, _selectedSegment!, barIndex);
+      _showSnackBar(
+        '📋 Сегмент вставлен в такт ${barIndex + 1}',
+        Colors.green,
+      );
+      
+      // Снимаем выделение после вставки
+      setState(() {
+        _clearSelectedSegment();
+      });
+    }
+  }
+  
+  // Очистка выбранного сегмента
+  void _clearSelectedSegment() {
+    _segmentClearTimer?.cancel();
+    if (_selectedTrackId != null) {
+      _controller.clearTrackSegment(_selectedTrackId!);
+    }
+    _selectedSegment = null;
+    _selectedTrackId = null;
+  }
+
   void _showBpmSettings() {
     showDialog(
       context: context,
@@ -83,7 +152,6 @@ class _HomeScreenState extends State<HomeScreen> {
               content: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Настройка BPM
                   const Text(
                     'Темп (BPM)',
                     style: TextStyle(color: Colors.white70),
@@ -120,10 +188,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-
                   const SizedBox(height: 16),
-
-                  // Настройка количества тактов
                   const Text(
                     'Количество тактов',
                     style: TextStyle(color: Colors.white70),
@@ -160,8 +225,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-
-                  const SizedBox(height: 16),
                 ],
               ),
               actions: [
@@ -173,7 +236,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: () {
                     AppConstants.updateBpm(tempBpm);
                     AppConstants.updateTotalBars(tempBars);
-                    setState(() {}); // Обновляем UI
+                    setState(() {});
                     Navigator.pop(context);
                   },
                   style: ElevatedButton.styleFrom(
@@ -217,8 +280,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (context.mounted) {
         Navigator.pop(context);
 
-        // В методе _exportToMidi замените сообщение об успехе:
-
         String successMessage;
         if (_controller.tracks.length == 1 && fileName != null) {
           successMessage = share
@@ -228,8 +289,7 @@ class _HomeScreenState extends State<HomeScreen> {
           if (share) {
             successMessage = 'ZIP архив с MIDI файлами отправлен';
           } else {
-            successMessage =
-                'Папка с MIDI файлами сохранена в Downloads/NotRed_Export_*';
+            successMessage = 'Папка с MIDI файлами сохранена в Downloads/NotRed_Export_*';
           }
         }
 
@@ -264,12 +324,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _showSnackBar(String message, Color color) {
+  void _showSnackBar(String message, Color color, {Duration duration = const Duration(seconds: 2)}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         backgroundColor: color,
         behavior: SnackBarBehavior.floating,
+        duration: duration,
       ),
     );
   }
@@ -307,8 +368,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<MidiNote> _getNotesInBar(Track track, int barIndex) {
-    final startTick = barIndex * AppConstants.ticksPerBeat;
-    final endTick = (barIndex + 1) * AppConstants.ticksPerBeat;
+    final ticksPerBar = AppConstants.ticksPerBeat * AppConstants.beatsPerBar;
+    final startTick = barIndex * ticksPerBar;
+    final endTick = (barIndex + 1) * ticksPerBar;
 
     return track.notes
         .where(
@@ -367,7 +429,7 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 const SizedBox(height: 35),
 
-                // AppBar с градиентным заголовком (как кнопка настроек)
+                // AppBar
                 GestureDetector(
                   onTap: _showBpmSettings,
                   child: Container(
@@ -408,7 +470,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const Spacer(),
-
                         Container(
                           margin: const EdgeInsets.only(right: 8),
                           child: ElevatedButton(
@@ -418,7 +479,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Colors.orange);
                                 return;
                               }
-
                               final hasNotes = _controller.tracks
                                   .any((t) => t.notes.isNotEmpty);
                               if (!hasNotes) {
@@ -426,9 +486,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     Colors.orange);
                                 return;
                               }
-
-                              _controller
-                                  .togglePlayback(); // Этот метод теперь просто запускает/останавливает
+                              _controller.togglePlayback();
                             },
                             style: ElevatedButton.styleFrom(
                               shape: const CircleBorder(),
@@ -436,10 +494,9 @@ class _HomeScreenState extends State<HomeScreen> {
                               backgroundColor: Colors.deepPurple,
                               foregroundColor: Colors.white,
                             ),
-                            child: const Icon(Icons.play_arrow), // ВСЕГДА PLAY
+                            child: const Icon(Icons.play_arrow),
                           ),
                         ),
-                        // Кнопка сохранения MIDI
                         Container(
                           margin: const EdgeInsets.only(right: 8),
                           child: ElevatedButton(
@@ -453,8 +510,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: const Icon(Icons.save),
                           ),
                         ),
-
-                        // Кнопка отправки MIDI
                         ElevatedButton(
                           onPressed: () => _exportToMidi(share: true),
                           style: ElevatedButton.styleFrom(
@@ -517,8 +572,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       const SizedBox(width: 16),
-
-                      // Тактовая лента
                       Expanded(
                         child: Stack(
                           children: [
@@ -534,8 +587,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               child: NotificationListener<ScrollNotification>(
                                 onNotification: (notification) {
-                                  if (notification
-                                      is ScrollUpdateNotification) {
+                                  if (notification is ScrollUpdateNotification) {
                                     if (_controller.horizontalScrollController
                                         .hasClients) {
                                       _controller.horizontalScrollController
@@ -614,6 +666,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               itemCount: _controller.tracks.length,
                               itemBuilder: (context, index) {
                                 final track = _controller.tracks[index];
+                                final trackSegment = _selectedTrackId == track.id 
+                                    ? _selectedSegment 
+                                    : null;
+                                
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 16),
                                   child: TrackRowWidget(
@@ -624,15 +680,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                       _controller.toggleMute(track.id);
                                       setState(() {});
                                     },
-                                    onEditPressed: () => _openPianoRoll(
-                                        track), // Это открывает редактор нот
+                                    onEditPressed: () => _openPianoRoll(track),
                                     onDeletePressed: () {
                                       _controller.deleteTrack(track.id);
                                       setState(() {});
                                     },
                                     onRename: (newName) {
-                                      _controller.renameTrack(
-                                          track.id, newName);
+                                      _controller.renameTrack(track.id, newName);
                                       setState(() {});
                                     },
                                     onInstrumentChange: (instrument) {
@@ -644,6 +698,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                         _controller.horizontalScrollController,
                                     getNotesInBar: _getNotesInBar,
                                     getNoteRange: _getNoteRange,
+                                    currentSegment: trackSegment,
+                                    onBarLongPress: (barIndex) => 
+                                        _onBarLongPress(track, barIndex),
+                                    onBarTapWithSegment: (barIndex) => 
+                                        _onBarTapWithSegment(track, barIndex),
                                   ),
                                 );
                               },

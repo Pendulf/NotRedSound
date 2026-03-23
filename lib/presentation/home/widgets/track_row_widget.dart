@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../data/models/track_model.dart';
+import '../../../data/models/pattern_segment.dart';
 import 'control_button.dart';
 import 'pattern_painter.dart';
 import '../../../core/dialogs/instrument_picker_dialog.dart';
@@ -16,6 +17,11 @@ class TrackRowWidget extends StatelessWidget {
   final ScrollController horizontalScrollController;
   final List<MidiNote> Function(Track, int) getNotesInBar;
   final Map<String, int> Function(Track) getNoteRange;
+  
+  // Новые параметры для работы с сегментами
+  final PatternSegment? currentSegment;
+  final Function(int) onBarLongPress; // barIndex
+  final Function(int) onBarTapWithSegment; // barIndex
 
   const TrackRowWidget({
     super.key,
@@ -29,6 +35,9 @@ class TrackRowWidget extends StatelessWidget {
     required this.horizontalScrollController,
     required this.getNotesInBar,
     required this.getNoteRange,
+    this.currentSegment,
+    required this.onBarLongPress,
+    required this.onBarTapWithSegment,
   });
 
   void _showRenameDialog(BuildContext context) {
@@ -84,6 +93,7 @@ class TrackRowWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final noteRange = getNoteRange(track);
+    final hasSegment = currentSegment != null;
 
     return Container(
       height: AppConstants.previewHeight + 65,
@@ -180,38 +190,92 @@ class TrackRowWidget extends StatelessWidget {
             color: Colors.amber,
           ),
 
-          // Правая часть - превью паттернов (кликабельная для редактирования)
+          // Правая часть - превью паттернов
           Expanded(
-            child: GestureDetector(
-              onTap: onEditPressed,
-              child: ListView.builder(
-                controller: horizontalScrollController,
-                scrollDirection: Axis.horizontal,
-                itemCount: AppConstants.maxBars,
-                itemBuilder: (context, barIndex) {
-                  final notesInBar = getNotesInBar(track, barIndex);
-                  return Container(
+            child: ListView.builder(
+              controller: horizontalScrollController,
+              scrollDirection: Axis.horizontal,
+              itemCount: AppConstants.maxBars,
+              itemBuilder: (context, barIndex) {
+                final notesInBar = getNotesInBar(track, barIndex);
+                final isEmpty = notesInBar.isEmpty;
+                final isSegmentAvailable = hasSegment && isEmpty;
+                
+                return GestureDetector(
+                  onLongPress: () => onBarLongPress(barIndex),
+                  onTap: () {
+                    // При коротком нажатии, если есть сегмент - вставляем его
+                    if (hasSegment && isEmpty) {
+                      onBarTapWithSegment(barIndex);
+                    } else {
+                      // Если нет сегмента, открываем редактор
+                      onEditPressed();
+                    }
+                  },
+                  child: Container(
                     width: AppConstants.barWidth,
                     height: AppConstants.previewHeight + 50,
                     decoration: BoxDecoration(
                       border: Border(
-                        right:
-                            BorderSide(color: Colors.grey.shade800, width: 1.0),
+                        right: BorderSide(
+                          color: Colors.grey.shade800, 
+                          width: 1.0,
+                        ),
                       ),
+                      // Подсветка если это место для вставки сегмента
+                      color: isSegmentAvailable
+                          ? track.color.withValues(alpha: 0.15)
+                          : null,
                     ),
-                    child: CustomPaint(
-                      painter: PatternPainter(
-                        notes: notesInBar,
-                        color: track.color,
-                        barWidth: AppConstants.barWidth,
-                        previewHeight: AppConstants.previewHeight,
-                        minNote: noteRange['min']!,
-                        maxNote: noteRange['max']!,
-                      ),
+                    child: Stack(
+                      children: [
+                        CustomPaint(
+  painter: PatternPainter(
+    notes: notesInBar,
+    color: track.color,
+    barWidth: AppConstants.barWidth,
+    previewHeight: AppConstants.previewHeight,
+    minNote: noteRange['min']!,
+    maxNote: noteRange['max']!,
+    ticksPerBar: AppConstants.ticksPerBeat * AppConstants.beatsPerBar, // Добавляем
+  ),
+),
+                        // Индикатор сегмента (полоска внизу)
+                        if (hasSegment && isEmpty)
+                          Positioned(
+                            bottom: 0,
+                            left: 4,
+                            right: 4,
+                            child: Container(
+                              height: 3,
+                              decoration: BoxDecoration(
+                                color: track.color,
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        // Подсказка при долгом нажатии
+                        if (notesInBar.isNotEmpty)
+                          Positioned(
+                            top: 4,
+                            right: 4,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                                vertical: 2,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.6),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              
+                            ),
+                          ),
+                      ],
                     ),
-                  );
-                },
-              ),
+                  ),
+                );
+              },
             ),
           ),
         ],
