@@ -3,6 +3,7 @@ import '../../../core/constants/app_constants.dart';
 import '../../../data/models/track_model.dart';
 import 'control_button.dart';
 import 'pattern_painter.dart';
+import '../../../core/dialogs/instrument_picker_dialog.dart';
 
 class TrackRowWidget extends StatelessWidget {
   final Track track;
@@ -11,7 +12,7 @@ class TrackRowWidget extends StatelessWidget {
   final VoidCallback onEditPressed;
   final VoidCallback onDeletePressed;
   final Function(String) onRename;
-  final Function(String) onInstrumentChange; // Колбэк для смены инструмента
+  final Function(String) onInstrumentChange;
   final ScrollController horizontalScrollController;
   final List<MidiNote> Function(Track, int) getNotesInBar;
   final Map<String, int> Function(Track) getNoteRange;
@@ -77,88 +78,6 @@ class TrackRowWidget extends StatelessWidget {
           ],
         );
       },
-    );
-  }
-
-  void _showInstrumentPicker(BuildContext context) {
-    final List<String> instruments = [
-      'Пианино',
-      'Электро пианино',
-      'Орган',
-      'Гитара',
-      'Бас',
-      'Арфа',
-      'Синт',
-      'Барабаны',
-    ];
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: const Text(
-          'Выберите инструмент',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: StatefulBuilder(
-            builder: (context, setState) {
-              return ListView.builder(
-                shrinkWrap: true,
-                itemCount: instruments.length,
-                itemBuilder: (context, index) {
-                  final instrument = instruments[index];
-                  final isSelected = instrument == track.instrument;
-
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 4),
-                    child: Material(
-                      color: isSelected
-                          ? track.color.withValues(alpha: 0.3)
-                          : Colors.transparent,
-                      child: InkWell(
-                        onTap: () {
-                          // Обновляем инструмент через колбэк
-                          onInstrumentChange(instrument);
-                          // Закрываем диалог
-                          Navigator.pop(context);
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: Row(
-                            children: [
-                              if (isSelected)
-                                Icon(Icons.check, color: track.color, size: 20),
-                              if (isSelected) const SizedBox(width: 8),
-                              Text(
-                                instrument,
-                                style: TextStyle(
-                                  color: isSelected ? track.color : Colors.white,
-                                  fontSize: 16,
-                                  fontWeight: isSelected
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть', style: TextStyle(color: Colors.grey)),
-          ),
-        ],
-      ),
     );
   }
 
@@ -230,7 +149,11 @@ class TrackRowWidget extends StatelessWidget {
                       ControlButton(
                         icon: Icons.music_note,
                         color: track.color,
-                        onPressed: () => _showInstrumentPicker(context),
+                        onPressed: () => showInstrumentPickerDialog(
+                          context,
+                          track,
+                          onInstrumentChange,
+                        ),
                       ),
                       ControlButton(
                         icon:
@@ -260,7 +183,7 @@ class TrackRowWidget extends StatelessWidget {
           // Правая часть - превью паттернов (кликабельная для редактирования)
           Expanded(
             child: GestureDetector(
-              onTap: onEditPressed, // Открываем Piano Roll по нажатию на превью
+              onTap: onEditPressed,
               child: ListView.builder(
                 controller: horizontalScrollController,
                 scrollDirection: Axis.horizontal,

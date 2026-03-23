@@ -5,6 +5,7 @@ import '../piano_roll/piano_roll_screen.dart';
 import '../../core/constants/app_constants.dart';
 import 'home_controller.dart';
 import 'widgets/track_row_widget.dart';
+import '../../core/dialogs/instrument_picker_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -252,6 +253,17 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _showInstrumentPickerForTrack(Track track) {
+    showInstrumentPickerDialog(
+      context,
+      track,
+      (instrument) {
+        _controller.updateTrackInstrument(track.id, instrument);
+        setState(() {});
+      },
+    );
+  }
+
   void _showSnackBar(String message, Color color) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -476,6 +488,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             onTap: () {
                               _controller.addTrack();
                               setState(() {});
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                final lastTrack = _controller.tracks.last;
+                                _showInstrumentPickerForTrack(lastTrack);
+                              });
                             },
                             borderRadius: BorderRadius.circular(4),
                             child: Row(
@@ -680,6 +696,10 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () {
               _controller.addTrack();
               setState(() {});
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                final lastTrack = _controller.tracks.last;
+                _showInstrumentPickerForTrack(lastTrack);
+              });
             },
             icon: const Icon(Icons.add, size: 24),
             label: const Text(
