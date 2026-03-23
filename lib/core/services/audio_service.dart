@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_midi_engine/flutter_midi_engine.dart';
 import 'package:path_provider/path_provider.dart';
@@ -20,22 +21,25 @@ class AudioService {
   VoidCallback? _onPlaybackFinishedCallback;
   bool _isInitialized = false;
   
-  final Set<int> _activeNotes = {};
+  // Храним активные ноты с информацией о канале
+  final Set<String> _activeNotes = {}; // Формат: "${channel}_${pitch}"
   final Map<String, Timer> _noteTimers = {};
-
-  // Карта для хранения инструментов дорожек
-final Map<String, int> _trackInstruments = {};
-
-// Установка инструмента для конкретной дорожки
-void setTrackInstrument(String trackId, String instrumentName) {
-  final program = instruments[instrumentName];
-  if (program != null) {
-    _trackInstruments[trackId] = program;
-  }
-}
+  
+  // Карта для хранения MIDI каналов для каждой дорожки
+  final Map<String, int> _trackChannels = {};
+  
+  // Карта для хранения инструментов дорожек (MIDI program)
+  final Map<String, int> _trackInstruments = {};
+  
+  // Следующий доступный канал (0-15, но 9 зарезервирован для ударных)
+  int _nextChannel = 0;
+  
+  static const int DRUMS_CHANNEL = 9;
+  
+  // Доступные MIDI каналы (исключая канал 9 для ударных)
+  final List<int> _availableChannels = [0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15];
   
   int _maxTick = 0;
-  int _currentChannel = 0; // 0 для обычных инструментов, 9 для ударных
   
   static const Map<String, int> instruments = {
     'Пианино': 0,
@@ -79,53 +83,121 @@ void setTrackInstrument(String trackId, String instrumentName) {
       if (success == true) {
         _isInitialized = true;
         await _midiEngine?.setVolume(volume: 100);
+        
+        // Инициализируем все каналы с программой по умолчанию (пианино)
+        for (int channel in _availableChannels) {
+          await _midiEngine?.changeProgram(program: 0, channel: channel);
+        }
+        // Инициализируем канал ударных
+        await _midiEngine?.changeProgram(program: 0, channel: DRUMS_CHANNEL);
       }
     } catch (e) {
     }
   }
 
-  void setInstrument(String instrumentName) {
+  // Назначение канала для дорожки
+  int _assignChannelForTrack(String trackId, bool isDrums) {
+    if (_trackChannels.containsKey(trackId)) {
+      return _trackChannels[trackId]!;
+    }
+    
+    int channel;
+    if (isDrums) {
+      channel = DRUMS_CHANNEL;
+    } else {
+      if (_nextChannel >= _availableChannels.length) {
+        _nextChannel = 0; // Если каналы закончились, начинаем сначала
+      }
+      channel = _availableChannels[_nextChannel];
+      _nextChannel++;
+    }
+    
+    _trackChannels[trackId] = channel;
+    debugPrint('🎵 Дорожке $trackId назначен канал $channel');
+    return channel;
+  }
+
+  // Установка инструмента для конкретной дорожки
+  void setTrackInstrument(String trackId, String instrumentName) async {
     if (!_isInitialized) return;
     
     final program = instruments[instrumentName];
     if (program != null) {
-      if (program == 128) {
-        // Ударные - используем канал 9
-        _currentChannel = 9;
+      _trackInstruments[trackId] = program;
+      
+      final isDrums = program == 128;
+      final channel = _assignChannelForTrack(trackId, isDrums);
+      
+      // Устанавливаем программу на канале дорожки
+      if (isDrums) {
+        // Для ударных не нужно менять программу, они всегда на канале 9
+        debugPrint('🥁 Установлены ударные для дорожки $trackId на канале $channel');
       } else {
-        // Обычный инструмент - Program Change на канале 0
-        _currentChannel = 0;
-        _midiEngine?.changeProgram(program: program);
+        await _midiEngine?.changeProgram(program: program, channel: channel);
+        debugPrint('🎹 Установлен инструмент $instrumentName (program $program) для дорожки $trackId на канале $channel');
       }
     }
   }
 
-  // ПУБЛИЧНЫЙ МЕТОД для воспроизведения ноты (предпросмотр)
-  Future<void> playNote(int pitch) async {
+  // Предпросмотр ноты с инструментом из конкретной дорожки
+  Future<void> playNoteForTrack(String trackId, int pitch) async {
     if (!_isInitialized) return;
+    
+    final program = _trackInstruments[trackId];
+    if (program == null) return;
+    
+    final isDrums = program == 128;
+    final channel = _assignChannelForTrack(trackId, isDrums);
+    
     try {
-      if (_currentChannel == 9) {
-        // На канале 9 pitch определяет ударный инструмент
+      // Для обычных инструментов убеждаемся, что программа установлена
+      if (!isDrums) {
+        await _midiEngine?.changeProgram(program: program, channel: channel);
       }
+      
       await _midiEngine?.playNote(
         note: pitch, 
         velocity: 80,
-        channel: _currentChannel,
+        channel: channel,
       );
+      
+      debugPrint('🎵 Воспроизведение ноты $pitch на канале $channel для дорожки $trackId');
     } catch (e) {
+      debugPrint('❌ Ошибка воспроизведения ноты: $e');
     }
   }
-
-  // ПУБЛИЧНЫЙ МЕТОД для остановки ноты
-  Future<void> stopNote(int pitch) async {
+  
+  // Остановка ноты для конкретной дорожки
+  Future<void> stopNoteForTrack(String trackId, int pitch) async {
     if (!_isInitialized) return;
+    
+    final program = _trackInstruments[trackId];
+    if (program == null) return;
+    
+    final isDrums = program == 128;
+    final channel = _assignChannelForTrack(trackId, isDrums);
+    
     try {
       await _midiEngine?.stopNote(
         note: pitch,
-        channel: _currentChannel,
+        channel: channel,
       );
     } catch (e) {
+      debugPrint('❌ Ошибка остановки ноты: $e');
     }
+  }
+
+  // Старый метод playNote оставляем для обратной совместимости
+  Future<void> playNote(int pitch) async {
+    if (!_isInitialized) return;
+    // По умолчанию используем канал 0
+    await _midiEngine?.playNote(note: pitch, velocity: 80, channel: 0);
+  }
+
+  // Старый метод stopNote оставляем для обратной совместимости
+  Future<void> stopNote(int pitch) async {
+    if (!_isInitialized) return;
+    await _midiEngine?.stopNote(note: pitch, channel: 0);
   }
 
   void startPlayback(List<Track> tracks, {VoidCallback? onTick, VoidCallback? onFinished}) {
@@ -137,6 +209,18 @@ void setTrackInstrument(String trackId, String instrumentName) {
     
     _tracks = tracks.where((t) => !t.isMuted).toList();
     if (_tracks.isEmpty) return;
+    
+    // Для каждой дорожки заранее назначаем каналы и устанавливаем инструменты
+    for (var track in _tracks) {
+      final program = _trackInstruments[track.id] ?? 0;
+      final isDrums = program == 128;
+      final channel = _assignChannelForTrack(track.id, isDrums);
+      
+      if (!isDrums) {
+        // Асинхронно устанавливаем программу, но не ждем
+        _midiEngine?.changeProgram(program: program, channel: channel);
+      }
+    }
     
     _maxTick = _tracks.expand((t) => t.notes).fold(0, (max, note) {
       return note.startTick + note.durationTicks > max 
@@ -183,63 +267,63 @@ void setTrackInstrument(String trackId, String instrumentName) {
   }
 
   void _playNotesAtTick(int tick) {
-  for (var track in _tracks) {
-    // Получаем инструмент для этой дорожки
-    final program = _trackInstruments[track.id] ?? 0;
-    final isDrums = program == 128;
-    
-    // Если это не ударные, устанавливаем программу перед воспроизведением
-    if (!isDrums && _midiEngine != null) {
-      _midiEngine?.changeProgram(program: program);
-    }
-    
-    for (var note in track.notes) {
-      if (note.startTick == tick && !_activeNotes.contains(note.pitch)) {
-        _playNote(note.pitch, isDrums: isDrums);
-        _activeNotes.add(note.pitch);
-        
-        final noteKey = '${track.id}_${note.pitch}';
-        
-        if (_noteTimers.containsKey(noteKey)) {
-          _noteTimers[noteKey]?.cancel();
-        }
-        
-        final durationMs = note.durationTicks * AppConstants.millisecondsPerTick;
-        if (durationMs > 0) {
-          final timer = Timer(Duration(milliseconds: durationMs), () {
-            if (_isPlaying) {
-              _stopNote(note.pitch);
-              _activeNotes.remove(note.pitch);
-              _noteTimers.remove(noteKey);
+    for (var track in _tracks) {
+      final program = _trackInstruments[track.id] ?? 0;
+      final isDrums = program == 128;
+      final channel = _trackChannels[track.id] ?? (isDrums ? DRUMS_CHANNEL : 0);
+      
+      for (var note in track.notes) {
+        if (note.startTick == tick) {
+          final noteKey = '${channel}_${note.pitch}';
+          
+          if (!_activeNotes.contains(noteKey)) {
+            _playNoteOnChannel(note.pitch, channel, isDrums);
+            _activeNotes.add(noteKey);
+            
+            if (_noteTimers.containsKey(noteKey)) {
+              _noteTimers[noteKey]?.cancel();
             }
-          });
-          _noteTimers[noteKey] = timer;
+            
+            final durationMs = note.durationTicks * AppConstants.millisecondsPerTick;
+            if (durationMs > 0) {
+              final timer = Timer(Duration(milliseconds: durationMs), () {
+                if (_isPlaying) {
+                  _stopNoteOnChannel(note.pitch, channel);
+                  _activeNotes.remove(noteKey);
+                  _noteTimers.remove(noteKey);
+                }
+              });
+              _noteTimers[noteKey] = timer;
+            }
+          }
         }
       }
     }
   }
-}
 
-  Future<void> _playNote(int pitch, {bool isDrums = false}) async {
+  Future<void> _playNoteOnChannel(int pitch, int channel, bool isDrums) async {
     try {
-      final channel = isDrums ? 9 : 0;
       await _midiEngine?.playNote(
         note: pitch, 
         velocity: 80,
         channel: channel,
       );
       if (isDrums) {
+        debugPrint('🥁 Воспроизведение ударной ноты $pitch на канале $channel');
       }
     } catch (e) {
+      debugPrint('❌ Ошибка воспроизведения ноты на канале $channel: $e');
     }
   }
 
-  Future<void> _stopNote(int pitch) async {
+  Future<void> _stopNoteOnChannel(int pitch, int channel) async {
     try {
-      // Останавливаем на обоих каналах для надежности
-      await _midiEngine?.stopNote(note: pitch, channel: 0);
-      await _midiEngine?.stopNote(note: pitch, channel: 9);
+      await _midiEngine?.stopNote(
+        note: pitch,
+        channel: channel,
+      );
     } catch (e) {
+      debugPrint('❌ Ошибка остановки ноты на канале $channel: $e');
     }
   }
 

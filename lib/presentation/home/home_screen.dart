@@ -189,8 +189,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _saveProject() async {
-      _showSnackBar('Функция в разработке', Colors.orange);
+    _showSnackBar('Функция в разработке', Colors.orange);
   }
+
   Future<void> _exportToMidi({required bool share}) async {
     if (_controller.tracks.isEmpty) {
       _showSnackBar('Нет дорожек для экспорта', Colors.red);
@@ -397,31 +398,35 @@ class _HomeScreenState extends State<HomeScreen> {
                         const Spacer(),
 
                         Container(
-  margin: const EdgeInsets.only(right: 8),
-  child: ElevatedButton(
-    onPressed: () {
-      if (_controller.tracks.isEmpty) {
-        _showSnackBar('Нет дорожек для воспроизведения', Colors.orange);
-        return;
-      }
-      
-      final hasNotes = _controller.tracks.any((t) => t.notes.isNotEmpty);
-      if (!hasNotes) {
-        _showSnackBar('Нет нот для воспроизведения', Colors.orange);
-        return;
-      }
-      
-      _controller.togglePlayback(); // Этот метод теперь просто запускает/останавливает
-    },
-    style: ElevatedButton.styleFrom(
-      shape: const CircleBorder(),
-      padding: const EdgeInsets.all(12),
-      backgroundColor: Colors.deepPurple,
-      foregroundColor: Colors.white,
-    ),
-    child: const Icon(Icons.play_arrow), // ВСЕГДА PLAY
-  ),
-),
+                          margin: const EdgeInsets.only(right: 8),
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (_controller.tracks.isEmpty) {
+                                _showSnackBar('Нет дорожек для воспроизведения',
+                                    Colors.orange);
+                                return;
+                              }
+
+                              final hasNotes = _controller.tracks
+                                  .any((t) => t.notes.isNotEmpty);
+                              if (!hasNotes) {
+                                _showSnackBar('Нет нот для воспроизведения',
+                                    Colors.orange);
+                                return;
+                              }
+
+                              _controller
+                                  .togglePlayback(); // Этот метод теперь просто запускает/останавливает
+                            },
+                            style: ElevatedButton.styleFrom(
+                              shape: const CircleBorder(),
+                              padding: const EdgeInsets.all(12),
+                              backgroundColor: Colors.deepPurple,
+                              foregroundColor: Colors.white,
+                            ),
+                            child: const Icon(Icons.play_arrow), // ВСЕГДА PLAY
+                          ),
+                        ),
                         // Кнопка сохранения MIDI
                         Container(
                           margin: const EdgeInsets.only(right: 8),
@@ -603,17 +608,20 @@ class _HomeScreenState extends State<HomeScreen> {
                                       _controller.toggleMute(track.id);
                                       setState(() {});
                                     },
-                                    onEditPressed: () => _openPianoRoll(track),
+                                    onEditPressed: () => _openPianoRoll(
+                                        track), // Это открывает редактор нот
                                     onDeletePressed: () {
                                       _controller.deleteTrack(track.id);
                                       setState(() {});
                                     },
                                     onRename: (newName) {
-                                      // Новый параметр
                                       _controller.renameTrack(
-                                        track.id,
-                                        newName,
-                                      );
+                                          track.id, newName);
+                                      setState(() {});
+                                    },
+                                    onInstrumentChange: (instrument) {
+                                      _controller.updateTrackInstrument(
+                                          track.id, instrument);
                                       setState(() {});
                                     },
                                     horizontalScrollController:

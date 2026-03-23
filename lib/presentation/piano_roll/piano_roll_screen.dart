@@ -23,7 +23,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   late Track currentTrack;
   final AudioService _audioService = AudioService();
   bool _isPlaying = false;
-  String _currentInstrument = 'Piano';
   
   // Новая переменная для хранения выбранной длительности ноты (в тиках)
   int _selectedNoteDuration = 4; // По умолчанию 4/16 (четверть)
@@ -39,17 +38,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   late int maxTicks;
   late int ticksPerBeat;
   late int beatsPerBar;
-
-  final List<String> _instruments = [
-    'Пианино',
-    'Электро пианино',
-    'Орган',
-    'Гитара',
-    'Бас',
-    'Арфа',
-    'Синт',
-    'Барабаны',
-  ];
 
   // Конфигурация длительностей нот
   final List<Map<String, dynamic>> _noteDurations = [
@@ -89,7 +77,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   void initState() {
     super.initState();
     currentTrack = widget.track;
-    _currentInstrument = currentTrack.instrument;
 
     maxTicks = AppConstants.maxTicks;
     ticksPerBeat = AppConstants.ticksPerBeat;
@@ -98,6 +85,19 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
     _timeScaleController = ScrollController();
     _notesGridController = ScrollController();
     _verticalScrollController = ScrollController();
+    
+    // Устанавливаем инструмент текущей дорожки при входе в Piano Roll
+    _setupTrackInstrument();
+  }
+  
+  // Установка инструмента дорожки
+  void _setupTrackInstrument() {
+ 
+    
+    // Также устанавливаем инструмент для дорожки в аудиосервисе
+    _audioService.setTrackInstrument(currentTrack.id, currentTrack.instrument);
+    
+    debugPrint('🎹 Установлен инструмент для дорожки "${currentTrack.name}": ${currentTrack.instrument}');
   }
 
   @override
@@ -122,6 +122,9 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         return;
       }
 
+      // Перед воспроизведением убеждаемся, что установлен правильный инструмент
+      _audioService.setTrackInstrument(currentTrack.id, currentTrack.instrument);
+      
       _audioService.startPlayback(
         [currentTrack],
         onTick: () {
@@ -231,84 +234,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
     );
   }
 
-  void _showInstrumentPicker() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        title: const Text(
-          'Выберите инструмент',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _instruments.length,
-            itemBuilder: (context, index) {
-              final instrument = _instruments[index];
-              final isSelected = instrument == _currentInstrument;
-
-              return Container(
-                margin: const EdgeInsets.only(bottom: 4),
-                child: Material(
-                  color: isSelected
-                      ? currentTrack.color.withValues(alpha: 0.3)
-                      : Colors.transparent,
-                  child: InkWell(
-                    onTap: () {
-                      setState(() {
-                        _currentInstrument = instrument;
-                        currentTrack.instrument =
-                            instrument; // Сохраняем в дорожку
-                      });
-                      _audioService.setInstrument(instrument);
-
-                      // Обновляем дорожку в репозитории
-                      widget.onTrackUpdated(currentTrack);
-
-                      Navigator.pop(context);
-                      _showSnackBar('Инструмент: $instrument', Colors.green);
-                    },
-                    child: Padding(
-                      padding: const EdgeInsets.all(12.0),
-                      child: Row(
-                        children: [
-                          if (isSelected)
-                            Icon(Icons.check,
-                                color: currentTrack.color, size: 20),
-                          if (isSelected) const SizedBox(width: 8),
-                          Text(
-                            instrument,
-                            style: TextStyle(
-                              color: isSelected
-                                  ? currentTrack.color
-                                  : Colors.white,
-                              fontSize: 16,
-                              fontWeight: isSelected
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть', style: TextStyle(color: Colors.grey)),
-          ),
-        ],
-      ),
-    );
-  }
-
   String _getOctaveName(int midiNote) {
     if (midiNote % 12 == 0) {
       final octave = (midiNote ~/ 12) - 1;
@@ -360,11 +285,12 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         );
         debugPrint('➕ Добавлена нота: $midiNote на тике $tick, длительность: $_selectedNoteDuration тиков');
 
-        // Играем ноту для предпросмотра
-        _audioService.playNote(midiNote);
+        // Играем ноту для предпросмотра с текущим инструментом дорожки
+        _audioService.playNoteForTrack(currentTrack.id, midiNote);
+        
         // Останавливаем через время, соответствующее длительности
         Future.delayed(Duration(milliseconds: _selectedNoteDuration * AppConstants.millisecondsPerTick), () {
-          _audioService.stopNote(midiNote);
+          _audioService.stopNoteForTrack(currentTrack.id, midiNote);
         });
       }
 
@@ -392,31 +318,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
     return Colors.grey.shade700;
   }
 
-  // Кнопка выбора инструмента в круге
-  Widget _buildInstrumentButton() {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: currentTrack.color
-            .withValues(alpha: 0.4), // Чуть темнее цвет дорожки
-      ),
-      child: IconButton(
-        icon: Icon(
-          Icons.menu,
-          color: Colors.white,
-          size: 20,
-        ),
-        onPressed: _showInstrumentPicker,
-        tooltip: 'Выбрать инструмент',
-        padding: EdgeInsets.zero,
-        splashRadius: 20,
-      ),
-    );
-  }
-
   // Кнопка очистки в круге
   Widget _buildClearButton() {
     return Container(
@@ -425,8 +326,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
       height: 40,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: currentTrack.color
-            .withValues(alpha: 0.4), // Чуть темнее цвет дорожки
+        color: currentTrack.color.withValues(alpha: 0.4),
       ),
       child: IconButton(
         icon: Icon(
@@ -450,8 +350,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
       height: 40,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: currentTrack.color
-            .withValues(alpha: 0.4), // Чуть темнее цвет дорожки
+        color: currentTrack.color.withValues(alpha: 0.4),
       ),
       child: IconButton(
         icon: Icon(
@@ -542,10 +441,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         backgroundColor: currentTrack.color.withValues(alpha: 0.8),
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          // Кнопка выбора инструмента в круге
-          _buildInstrumentButton(),
-
-          const SizedBox(width: 8),
           // Кнопка очистки в круге
           _buildClearButton(),
 
