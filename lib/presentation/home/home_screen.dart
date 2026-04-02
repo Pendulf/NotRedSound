@@ -107,21 +107,59 @@ class _HomeScreenState extends State<HomeScreen> {
       _showSnackBar('⚠️ Нет нот в этом такте', Colors.orange);
     }
   }
+
+// Обработка нажатия на такт
+void _onBarTap(Track track, int barIndex) {
+  final notesInBar = _getNotesInBar(track, barIndex);
+  final hasNotes = notesInBar.isNotEmpty;
+  final hasSegment = _selectedSegment != null && _selectedTrackId == track.id;
   
-  // Обработка нажатия на такт с сегментом
-  void _onBarTapWithSegment(Track track, int barIndex) {
-    if (_selectedSegment != null && _selectedTrackId == track.id) {
-      _controller.copySegmentToBar(track.id, _selectedSegment!, barIndex);
-      _showSnackBar(
-        '📋 Сегмент вставлен в такт ${barIndex + 1}',
-        Colors.green,
-      );
+  // Если есть выделенный сегмент
+  if (hasSegment) {
+    if (hasNotes) {
+      // Если такт заполнен - удаляем ноты в этом такте
+      _deleteNotesInBar(track, barIndex);
       
-      // Снимаем выделение после вставки
+      // Снимаем выделение сегмента
+      setState(() {
+        _clearSelectedSegment();
+      });
+    } else {
+      // Если такт пустой - вставляем сегмент
+      _controller.copySegmentToBar(track.id, _selectedSegment!, barIndex);
+
       setState(() {
         _clearSelectedSegment();
       });
     }
+  } else {
+
+    _openPianoRoll(track);
+  }
+}
+  
+  // Удаление нот в конкретном такте
+  void _deleteNotesInBar(Track track, int barIndex) {
+    final ticksPerBar = AppConstants.ticksPerBeat * AppConstants.beatsPerBar;
+    final startTick = barIndex * ticksPerBar;
+    final endTick = (barIndex + 1) * ticksPerBar;
+    
+    // Фильтруем ноты, удаляя те, что находятся в указанном такте
+    final updatedNotes = track.notes
+        .where((note) => note.startTick < startTick || note.startTick >= endTick)
+        .toList();
+    
+    // Обновляем дорожку
+    final updatedTrack = Track(
+      id: track.id,
+      name: track.name,
+      isMuted: track.isMuted,
+      color: track.color,
+      notes: updatedNotes,
+      instrument: track.instrument,
+    );
+    
+    _controller.updateTrack(updatedTrack);
   }
   
   // Очистка выбранного сегмента
@@ -701,8 +739,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     currentSegment: trackSegment,
                                     onBarLongPress: (barIndex) => 
                                         _onBarLongPress(track, barIndex),
-                                    onBarTapWithSegment: (barIndex) => 
-                                        _onBarTapWithSegment(track, barIndex),
+                                    onBarTap: (barIndex) => 
+                                        _onBarTap(track, barIndex),
                                   ),
                                 );
                               },

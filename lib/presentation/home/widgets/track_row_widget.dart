@@ -21,7 +21,7 @@ class TrackRowWidget extends StatelessWidget {
   // Новые параметры для работы с сегментами
   final PatternSegment? currentSegment;
   final Function(int) onBarLongPress; // barIndex
-  final Function(int) onBarTapWithSegment; // barIndex
+  final Function(int) onBarTap; // barIndex
 
   const TrackRowWidget({
     super.key,
@@ -37,7 +37,7 @@ class TrackRowWidget extends StatelessWidget {
     required this.getNoteRange,
     this.currentSegment,
     required this.onBarLongPress,
-    required this.onBarTapWithSegment,
+    required this.onBarTap,
   });
 
   void _showRenameDialog(BuildContext context) {
@@ -94,6 +94,7 @@ class TrackRowWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     final noteRange = getNoteRange(track);
     final hasSegment = currentSegment != null;
+    final ticksPerBar = AppConstants.ticksPerBeat * AppConstants.beatsPerBar;
 
     return Container(
       height: AppConstants.previewHeight + 65,
@@ -203,15 +204,7 @@ class TrackRowWidget extends StatelessWidget {
                 
                 return GestureDetector(
                   onLongPress: () => onBarLongPress(barIndex),
-                  onTap: () {
-                    // При коротком нажатии, если есть сегмент - вставляем его
-                    if (hasSegment && isEmpty) {
-                      onBarTapWithSegment(barIndex);
-                    } else {
-                      // Если нет сегмента, открываем редактор
-                      onEditPressed();
-                    }
-                  },
+                  onTap: () => onBarTap(barIndex),
                   child: Container(
                     width: AppConstants.barWidth,
                     height: AppConstants.previewHeight + 50,
@@ -230,18 +223,18 @@ class TrackRowWidget extends StatelessWidget {
                     child: Stack(
                       children: [
                         CustomPaint(
-  painter: PatternPainter(
-    notes: notesInBar,
-    color: track.color,
-    barWidth: AppConstants.barWidth,
-    previewHeight: AppConstants.previewHeight,
-    minNote: noteRange['min']!,
-    maxNote: noteRange['max']!,
-    ticksPerBar: AppConstants.ticksPerBeat * AppConstants.beatsPerBar, // Добавляем
-  ),
-),
+                          painter: PatternPainter(
+                            notes: notesInBar,
+                            color: track.color,
+                            barWidth: AppConstants.barWidth,
+                            previewHeight: AppConstants.previewHeight,
+                            minNote: noteRange['min']!,
+                            maxNote: noteRange['max']!,
+                            ticksPerBar: ticksPerBar,
+                          ),
+                        ),
                         // Индикатор сегмента (полоска внизу)
-                        if (hasSegment && isEmpty)
+                        if (isSegmentAvailable)
                           Positioned(
                             bottom: 0,
                             left: 4,
@@ -268,7 +261,6 @@ class TrackRowWidget extends StatelessWidget {
                                 color: Colors.black.withValues(alpha: 0.6),
                                 borderRadius: BorderRadius.circular(4),
                               ),
-                              
                             ),
                           ),
                       ],
