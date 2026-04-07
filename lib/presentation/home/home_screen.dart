@@ -1,14 +1,15 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import '../../data/models/track_model.dart';
+
+import '../../core/constants/app_constants.dart';
+import '../../core/dialogs/instrument_picker_dialog.dart';
 import '../../data/models/pattern_segment.dart';
+import '../../data/models/track_model.dart';
 import '../../data/repositories/track_repository.dart';
 import '../piano_roll/piano_roll_screen.dart';
-import '../../core/constants/app_constants.dart';
 import 'home_controller.dart';
 import 'widgets/track_row_widget.dart';
-import '../../core/dialogs/instrument_picker_dialog.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,8 +21,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   late HomeController _controller;
   late TrackRepository _repository;
-  
-  // Состояние для сегментов
+
   PatternSegment? _selectedSegment;
   String? _selectedTrackId;
   Timer? _segmentClearTimer;
@@ -31,9 +31,21 @@ class _HomeScreenState extends State<HomeScreen> {
     super.initState();
     _repository = TrackRepository();
     _controller = HomeController(_repository);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
+    _controller.addListener(_controllerListener);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _calculateBarWidth();
+      await _controller.loadProject();
+      if (mounted) {
+        setState(() {});
+      }
     });
+  }
+
+  void _controllerListener() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
@@ -45,6 +57,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _segmentClearTimer?.cancel();
+    _controller.removeListener(_controllerListener);
     _controller.dispose();
     super.dispose();
   }
@@ -69,100 +82,69 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
     ).then((_) {
-      setState(() {});
+      if (mounted) {
+        setState(() {});
+      }
     });
   }
 
-  // Обработка долгого нажатия на такт
   void _onBarLongPress(Track track, int barIndex) {
-    // Создаем сегмент из текущего такта
     final segment = _controller.createSegmentFromBars(track.id, barIndex, 1);
-    
-    if (segment != null) {
-      // Отменяем предыдущий таймер если есть
-      _segmentClearTimer?.cancel();
-      
-      setState(() {
-        _selectedSegment = segment;
-        _selectedTrackId = track.id;
-        _controller.setTrackSegment(track.id, segment);
-      });
-      
-      _showSnackBar(
-        '✅ Сегмент создан! Нажмите на пустой такт для вставки',
-        Colors.green,
-        duration: const Duration(seconds: 2),
-      );
-      
-      // Автоматически снимаем выделение через 3 секунды
-      _segmentClearTimer = Timer(const Duration(seconds: 3), () {
-        if (mounted && _selectedSegment != null) {
-          setState(() {
-            _clearSelectedSegment();
-          });
-          _showSnackBar('⌛️ Выделение сегмента снято', Colors.grey);
-        }
-      });
-    } else {
-      _showSnackBar('⚠️ Нет нот в этом такте', Colors.orange);
+
+    if (segment == null) {
+      _showSnackBar('⚠️ В этом такте нет нот', Colors.orange);
+      return;
     }
+
+    _segmentClearTimer?.cancel();
+
+    setState(() {
+      _selectedSegment = segment;
+      _selectedTrackId = track.id;
+      _controller.setTrackSegment(track.id, segment);
+    });
+
+    _showSnackBar(
+      '✅ Такт скопирован. Нажми на пустой такт для вставки или на заполненный для удаления',
+      Colors.green,
+      duration: const Duration(seconds: 2),
+    );
+
+    _segmentClearTimer = Timer(const Duration(seconds: 5), () {
+      if (!mounted) return;
+
+      setState(() {
+        _clearSelectedSegment();
+      });
+
+      _showSnackBar('⌛ Выделение сегмента снято', Colors.grey);
+    });
   }
 
-// Обработка нажатия на такт
-void _onBarTap(Track track, int barIndex) {
-  final notesInBar = _getNotesInBar(track, barIndex);
-  final hasNotes = notesInBar.isNotEmpty;
-  final hasSegment = _selectedSegment != null && _selectedTrackId == track.id;
-  
-  // Если есть выделенный сегмент
-  if (hasSegment) {
-    if (hasNotes) {
-      // Если такт заполнен - удаляем ноты в этом такте
-      _deleteNotesInBar(track, barIndex);
-      
-      // Снимаем выделение сегмента
-      setState(() {
-        _clearSelectedSegment();
-      });
-    } else {
-      // Если такт пустой - вставляем сегмент
-      _controller.copySegmentToBar(track.id, _selectedSegment!, barIndex);
+  void _onBarTap(Track track, int barIndex) {
+    final hasSegment = _selectedSegment != null && _selectedTrackId == track.id;
+
+    if (hasSegment) {
+      final notesInBar = _getNotesInBar(track, barIndex);
+      final barHasNotes = notesInBar.isNotEmpty;
+
+      if (barHasNotes) {
+        _controller.deleteNotesInBar(track.id, barIndex);
+        _showSnackBar('🗑️ Ноты в такте удалены', Colors.orange);
+      } else {
+        _controller.copySegmentToBar(track.id, _selectedSegment!, barIndex);
+        _showSnackBar('📋 Сегмент вставлен', Colors.green);
+      }
 
       setState(() {
         _clearSelectedSegment();
       });
+      return;
     }
-  } else {
 
     _openPianoRoll(track);
   }
-}
-  
-  // Удаление нот в конкретном такте
-  void _deleteNotesInBar(Track track, int barIndex) {
-    final ticksPerBar = AppConstants.ticksPerBeat * AppConstants.beatsPerBar;
-    final startTick = barIndex * ticksPerBar;
-    final endTick = (barIndex + 1) * ticksPerBar;
-    
-    // Фильтруем ноты, удаляя те, что находятся в указанном такте
-    final updatedNotes = track.notes
-        .where((note) => note.startTick < startTick || note.startTick >= endTick)
-        .toList();
-    
-    // Обновляем дорожку
-    final updatedTrack = Track(
-      id: track.id,
-      name: track.name,
-      isMuted: track.isMuted,
-      color: track.color,
-      notes: updatedNotes,
-      instrument: track.instrument,
-    );
-    
-    _controller.updateTrack(updatedTrack);
-  }
-  
-  // Очистка выбранного сегмента
+
   void _clearSelectedSegment() {
     _segmentClearTimer?.cancel();
     if (_selectedTrackId != null) {
@@ -274,8 +256,8 @@ void _onBarTap(Track track, int barIndex) {
                   onPressed: () {
                     AppConstants.updateBpm(tempBpm);
                     AppConstants.updateTotalBars(tempBars);
-                    setState(() {});
                     Navigator.pop(context);
+                    setState(() {});
                   },
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.deepPurple,
@@ -291,7 +273,14 @@ void _onBarTap(Track track, int barIndex) {
   }
 
   Future<void> _saveProject() async {
-    _showSnackBar('Функция в разработке', Colors.orange);
+    try {
+      await _controller.saveProject();
+      if (!mounted) return;
+      _showSnackBar('Проект сохранён', Colors.green);
+    } catch (e) {
+      if (!mounted) return;
+      _showSnackBar('Ошибка сохранения: $e', Colors.red);
+    }
   }
 
   Future<void> _exportToMidi({required bool share}) async {
@@ -302,8 +291,7 @@ void _onBarTap(Track track, int barIndex) {
 
     String? fileName;
     if (_controller.tracks.length == 1) {
-      final trackName = _controller.tracks.first.name;
-      fileName = '$trackName.mid';
+      fileName = '${_controller.tracks.first.name}.mid';
     }
 
     _showLoadingDialog();
@@ -315,29 +303,26 @@ void _onBarTap(Track track, int barIndex) {
         bpm: AppConstants.bpm,
       );
 
-      if (context.mounted) {
-        Navigator.pop(context);
+      if (!mounted) return;
+      Navigator.pop(context);
 
-        String successMessage;
-        if (_controller.tracks.length == 1 && fileName != null) {
-          successMessage = share
-              ? 'MIDI файл "${fileName.replaceAll('.mid', '')}" отправлен'
-              : 'MIDI файл "${fileName.replaceAll('.mid', '')}" сохранен в Downloads';
-        } else {
-          if (share) {
-            successMessage = 'ZIP архив с MIDI файлами отправлен';
-          } else {
-            successMessage = 'Папка с MIDI файлами сохранена в Downloads/NotRed_Export_*';
-          }
-        }
-
-        _showSnackBar(successMessage, Colors.green);
+      if (_controller.tracks.length == 1 && fileName != null) {
+        _showSnackBar(
+          share ? 'MIDI файл отправлен' : 'MIDI файл сохранён',
+          Colors.green,
+        );
+      } else {
+        _showSnackBar(
+          share
+              ? 'ZIP архив с MIDI файлами отправлен'
+              : 'Папка с MIDI файлами сохранена',
+          Colors.green,
+        );
       }
     } catch (e) {
-      if (context.mounted) {
-        Navigator.pop(context);
-        _showSnackBar('Ошибка: ${e.toString()}', Colors.red);
-      }
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showSnackBar('Ошибка: $e', Colors.red);
     }
   }
 
@@ -362,7 +347,11 @@ void _onBarTap(Track track, int barIndex) {
     );
   }
 
-  void _showSnackBar(String message, Color color, {Duration duration = const Duration(seconds: 2)}) {
+  void _showSnackBar(
+    String message,
+    Color color, {
+    Duration duration = const Duration(seconds: 2),
+  }) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -381,10 +370,11 @@ void _onBarTap(Track track, int barIndex) {
         0.0,
         _controller.horizontalScrollController.position.maxScrollExtent,
       );
+
       _controller.horizontalScrollController.animateTo(
         newOffset,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
       );
     }
   }
@@ -397,27 +387,48 @@ void _onBarTap(Track track, int barIndex) {
         0.0,
         _controller.horizontalScrollController.position.maxScrollExtent,
       );
+
       _controller.horizontalScrollController.animateTo(
         newOffset,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
       );
     }
   }
 
   List<MidiNote> _getNotesInBar(Track track, int barIndex) {
-    final ticksPerBar = AppConstants.ticksPerBeat * AppConstants.beatsPerBar;
-    final startTick = barIndex * ticksPerBar;
-    final endTick = (barIndex + 1) * ticksPerBar;
+    final startTick = barIndex * AppConstants.ticksPerBar;
+    final endTick = startTick + AppConstants.ticksPerBar;
 
-    return track.notes
-        .where(
-          (note) =>
-              (note.startTick >= startTick && note.startTick < endTick) ||
-              (note.startTick + note.durationTicks > startTick &&
-                  note.startTick < endTick),
-        )
-        .toList();
+    final result = <MidiNote>[];
+
+    for (final note in track.notes) {
+      if (!note.intersectsRange(startTick, endTick)) continue;
+
+      final clippedStart =
+          note.startTick < startTick ? startTick : note.startTick;
+      final clippedEnd = note.endTick > endTick ? endTick : note.endTick;
+      final clippedDuration = clippedEnd - clippedStart;
+
+      if (clippedDuration <= 0) continue;
+
+      result.add(
+        MidiNote(
+          pitch: note.pitch,
+          startTick: clippedStart - startTick,
+          durationTicks: clippedDuration,
+        ),
+      );
+    }
+
+    result.sort((a, b) {
+      if (a.startTick != b.startTick) {
+        return a.startTick.compareTo(b.startTick);
+      }
+      return a.pitch.compareTo(b.pitch);
+    });
+
+    return result;
   }
 
   Map<String, int> _getNoteRange(Track track) {
@@ -439,9 +450,34 @@ void _onBarTap(Track track, int barIndex) {
     return {'min': minPitch, 'max': maxPitch};
   }
 
+  Widget _buildPlayheadHeaderOverlay() {
+    if (!_controller.isPlaying) {
+      return const SizedBox.shrink();
+    }
+
+    final tickWidth = AppConstants.barWidth / AppConstants.ticksPerBar;
+    final playheadX =
+        (_controller.currentTick * tickWidth) -
+        (_controller.horizontalScrollController.hasClients
+            ? _controller.horizontalScrollController.offset
+            : 0);
+
+    return Positioned(
+      left: playheadX,
+      top: 0,
+      bottom: 0,
+      child: IgnorePointer(
+        child: Container(
+          width: 3,
+          color: Colors.amber,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final bool hasTracks = _controller.tracks.isNotEmpty;
+    final hasTracks = _controller.tracks.isNotEmpty;
 
     return Scaffold(
       backgroundColor: Colors.grey[900],
@@ -460,14 +496,12 @@ void _onBarTap(Track track, int barIndex) {
             child: Container(color: Colors.black.withValues(alpha: 0.6)),
           ),
           Padding(
-            padding: EdgeInsets.symmetric(
+            padding: const EdgeInsets.symmetric(
               horizontal: AppConstants.horizontalPadding,
             ),
             child: Column(
               children: [
                 const SizedBox(height: 35),
-
-                // AppBar
                 GestureDetector(
                   onTap: _showBpmSettings,
                   child: Container(
@@ -489,12 +523,8 @@ void _onBarTap(Track track, int barIndex) {
                     child: Row(
                       children: [
                         ShaderMask(
-                          shaderCallback: (bounds) => LinearGradient(
-                            colors: [
-                              Colors.red,
-                              Colors.purple,
-                              Colors.blue,
-                            ],
+                          shaderCallback: (bounds) => const LinearGradient(
+                            colors: [Colors.red, Colors.purple, Colors.blue],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ).createShader(bounds),
@@ -513,18 +543,25 @@ void _onBarTap(Track track, int barIndex) {
                           child: ElevatedButton(
                             onPressed: () {
                               if (_controller.tracks.isEmpty) {
-                                _showSnackBar('Нет дорожек для воспроизведения',
-                                    Colors.orange);
+                                _showSnackBar(
+                                  'Нет дорожек для воспроизведения',
+                                  Colors.orange,
+                                );
                                 return;
                               }
+
                               final hasNotes = _controller.tracks
                                   .any((t) => t.notes.isNotEmpty);
                               if (!hasNotes) {
-                                _showSnackBar('Нет нот для воспроизведения',
-                                    Colors.orange);
+                                _showSnackBar(
+                                  'Нет нот для воспроизведения',
+                                  Colors.orange,
+                                );
                                 return;
                               }
+
                               _controller.togglePlayback();
+                              setState(() {});
                             },
                             style: ElevatedButton.styleFrom(
                               shape: const CircleBorder(),
@@ -532,13 +569,17 @@ void _onBarTap(Track track, int barIndex) {
                               backgroundColor: Colors.deepPurple,
                               foregroundColor: Colors.white,
                             ),
-                            child: const Icon(Icons.play_arrow),
+                            child: Icon(
+                              _controller.isPlaying
+                                  ? Icons.stop
+                                  : Icons.play_arrow,
+                            ),
                           ),
                         ),
                         Container(
                           margin: const EdgeInsets.only(right: 8),
                           child: ElevatedButton(
-                            onPressed: () => _saveProject(),
+                            onPressed: _saveProject,
                             style: ElevatedButton.styleFrom(
                               shape: const CircleBorder(),
                               padding: const EdgeInsets.all(12),
@@ -562,9 +603,7 @@ void _onBarTap(Track track, int barIndex) {
                     ),
                   ),
                 ),
-
                 const SizedBox(height: 12),
-
                 if (hasTracks) ...[
                   Row(
                     children: [
@@ -587,15 +626,11 @@ void _onBarTap(Track track, int barIndex) {
                               });
                             },
                             borderRadius: BorderRadius.circular(4),
-                            child: Row(
+                            child: const Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
-                                const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 16,
-                                ),
-                                const SizedBox(width: 4),
+                                Icon(Icons.add, color: Colors.white, size: 16),
+                                SizedBox(width: 4),
                                 Text(
                                   'Добавить дорожку',
                                   style: TextStyle(
@@ -623,36 +658,36 @@ void _onBarTap(Track track, int barIndex) {
                                   width: 2,
                                 ),
                               ),
-                              child: NotificationListener<ScrollNotification>(
-                                onNotification: (notification) {
-                                  if (notification is ScrollUpdateNotification) {
-                                    if (_controller.horizontalScrollController
-                                        .hasClients) {
-                                      _controller.horizontalScrollController
-                                          .jumpTo(notification.metrics.pixels);
-                                    }
-                                  }
-                                  return true;
-                                },
-                                child: ListView.builder(
-                                  scrollDirection: Axis.horizontal,
-                                  itemCount: AppConstants.maxBars,
-                                  itemBuilder: (context, index) {
-                                    return Container(
-                                      width: AppConstants.barWidth,
-                                      decoration: BoxDecoration(
-                                        border: Border(
-                                          right: BorderSide(
-                                            color: Colors.amber,
-                                            width: 2.0,
-                                          ),
+                              child: ListView.builder(
+                                scrollDirection: Axis.horizontal,
+                                controller: _controller.horizontalScrollController,
+                                physics: const ClampingScrollPhysics(),
+                                itemCount: AppConstants.maxBars,
+                                itemBuilder: (context, index) {
+                                  return Container(
+                                    width: AppConstants.barWidth,
+                                    alignment: Alignment.center,
+                                    decoration: const BoxDecoration(
+                                      border: Border(
+                                        right: BorderSide(
+                                          color: Colors.amber,
+                                          width: 2,
                                         ),
                                       ),
-                                    );
-                                  },
-                                ),
+                                    ),
+                                    child: Text(
+                                      '${index + 1}',
+                                      style: const TextStyle(
+                                        color: Colors.amber,
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
                             ),
+                            _buildPlayheadHeaderOverlay(),
                             Positioned(
                               left: 0,
                               top: 0,
@@ -684,15 +719,10 @@ void _onBarTap(Track track, int barIndex) {
                   ),
                   const SizedBox(height: 12),
                 ],
-
                 Expanded(
                   child: hasTracks
                       ? Container(
                           decoration: BoxDecoration(
-                            border: Border.all(
-                              color: const Color.fromARGB(0, 33, 33, 33),
-                              width: 1,
-                            ),
                             borderRadius: BorderRadius.circular(8),
                           ),
                           clipBehavior: Clip.antiAlias,
@@ -700,14 +730,14 @@ void _onBarTap(Track track, int barIndex) {
                             controller: _controller.verticalScrollController,
                             child: ListView.builder(
                               controller: _controller.verticalScrollController,
-                              padding: const EdgeInsets.all(0),
                               itemCount: _controller.tracks.length,
                               itemBuilder: (context, index) {
                                 final track = _controller.tracks[index];
-                                final trackSegment = _selectedTrackId == track.id 
-                                    ? _selectedSegment 
-                                    : null;
-                                
+                                final trackSegment =
+                                    _selectedTrackId == track.id
+                                        ? _selectedSegment
+                                        : null;
+
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 16),
                                   child: TrackRowWidget(
@@ -729,7 +759,9 @@ void _onBarTap(Track track, int barIndex) {
                                     },
                                     onInstrumentChange: (instrument) {
                                       _controller.updateTrackInstrument(
-                                          track.id, instrument);
+                                        track.id,
+                                        instrument,
+                                      );
                                       setState(() {});
                                     },
                                     horizontalScrollController:
@@ -737,10 +769,12 @@ void _onBarTap(Track track, int barIndex) {
                                     getNotesInBar: _getNotesInBar,
                                     getNoteRange: _getNoteRange,
                                     currentSegment: trackSegment,
-                                    onBarLongPress: (barIndex) => 
+                                    onBarLongPress: (barIndex) =>
                                         _onBarLongPress(track, barIndex),
-                                    onBarTap: (barIndex) => 
+                                    onBarTap: (barIndex) =>
                                         _onBarTap(track, barIndex),
+                                    playheadTick: _controller.currentTick,
+                                    isPlaying: _controller.isPlaying,
                                   ),
                                 );
                               },
@@ -749,7 +783,6 @@ void _onBarTap(Track track, int barIndex) {
                         )
                       : _buildEmptyState(),
                 ),
-
                 const SizedBox(height: 8),
               ],
             ),
@@ -806,7 +839,10 @@ void _onBarTap(Track track, int barIndex) {
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.deepPurple,
               foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 32,
+                vertical: 16,
+              ),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(30),
               ),

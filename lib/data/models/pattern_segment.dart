@@ -1,11 +1,13 @@
-// lib/data/models/pattern_segment.dart
-import 'package:flutter/material.dart';
 import 'track_model.dart';
 
 class PatternSegment {
   final String id;
   final String name;
+
+  /// Ноты хранятся ОТНОСИТЕЛЬНО начала сегмента
   final List<MidiNote> notes;
+
+  /// Длина сегмента в тактах
   final int barLength;
   final DateTime createdAt;
 
@@ -17,16 +19,18 @@ class PatternSegment {
     required this.createdAt,
   });
 
-  // Копирование нот со смещением по тактам
   List<MidiNote> copyNotesToBar(int targetBarIndex, int ticksPerBar) {
     final startTick = targetBarIndex * ticksPerBar;
-    return notes.map((note) {
-      return MidiNote(
-        pitch: note.pitch,
-        startTick: startTick + (note.startTick % ticksPerBar),
-        durationTicks: note.durationTicks,
-      );
-    }).toList();
+
+    return notes
+        .map(
+          (note) => MidiNote(
+            pitch: note.pitch,
+            startTick: startTick + note.startTick,
+            durationTicks: note.durationTicks,
+          ),
+        )
+        .toList();
   }
 
   PatternSegment copyWith({

@@ -8,7 +8,7 @@ class PatternPainter extends CustomPainter {
   final double previewHeight;
   final int minNote;
   final int maxNote;
-  final int ticksPerBar; // Добавляем параметр для тиков в такте
+  final int ticksPerBar;
 
   PatternPainter({
     required this.notes,
@@ -17,7 +17,7 @@ class PatternPainter extends CustomPainter {
     required this.previewHeight,
     required this.minNote,
     required this.maxNote,
-    required this.ticksPerBar, // Новый параметр
+    required this.ticksPerBar,
   });
 
   @override
@@ -25,21 +25,19 @@ class PatternPainter extends CustomPainter {
     if (notes.isEmpty) return;
 
     final paint = Paint()
-      ..color = color.withValues(alpha: 0.7)
+      ..color = color.withValues(alpha: 0.75)
       ..style = PaintingStyle.fill;
 
     for (final note in notes) {
-      final double normalizedY = _normalizeNotePosition(note.pitch);
-      
-      // Вычисляем относительную позицию в пределах такта (0-1)
-      final double relativePosition = (note.startTick % ticksPerBar) / ticksPerBar;
-      final double noteX = relativePosition * barWidth;
-      
-      // Длительность ноты: делим на 4 (используем ticksPerBar * 4 для 4-кратного уменьшения)
-      final double noteWidth = (note.durationTicks / ticksPerBar.toDouble()) * barWidth ;
-      final double noteHeight = previewHeight / (maxNote - minNote + 1) * 0.8;
+      final normalizedY = _normalizeNotePosition(note.pitch);
+      final relativePosition = note.startTick / ticksPerBar;
+      final noteX = relativePosition * barWidth;
 
+      final noteWidth =
+          ((note.durationTicks / ticksPerBar) * barWidth).clamp(2.0, barWidth);
 
+      final noteHeight =
+          (previewHeight / (maxNote - minNote + 1) * 0.8).clamp(2.0, 10.0);
 
       canvas.drawRRect(
         RRect.fromRectAndRadius(
@@ -57,9 +55,10 @@ class PatternPainter extends CustomPainter {
   }
 
   double _normalizeNotePosition(int pitch) {
-    final int range = maxNote - minNote;
-    if (range == 0) return previewHeight / 2;
-    final double position = (maxNote - pitch) / range;
+    final range = maxNote - minNote;
+    if (range <= 0) return previewHeight / 2;
+
+    final position = (maxNote - pitch) / range;
     return position * previewHeight;
   }
 
@@ -68,6 +67,8 @@ class PatternPainter extends CustomPainter {
     return oldDelegate.notes != notes ||
         oldDelegate.color != color ||
         oldDelegate.minNote != minNote ||
-        oldDelegate.maxNote != maxNote;
+        oldDelegate.maxNote != maxNote ||
+        oldDelegate.ticksPerBar != ticksPerBar ||
+        oldDelegate.barWidth != barWidth;
   }
 }

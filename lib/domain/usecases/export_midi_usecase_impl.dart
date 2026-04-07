@@ -6,6 +6,7 @@ import 'package:midi_util/midi_util.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../core/constants/app_constants.dart';
 import '../entities/track_entity.dart';
 import 'export_midi_usecase.dart';
 
@@ -21,14 +22,12 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
       throw Exception('Нет дорожек для экспорта');
     }
 
-    // Фильтруем только дорожки с нотами
     final tracksWithNotes = tracks.where((t) => t.notes.isNotEmpty).toList();
     if (tracksWithNotes.isEmpty) {
       throw Exception('Нет нот для экспорта');
     }
 
     if (tracksWithNotes.length == 1) {
-      // Если одна дорожка - экспортируем как отдельный файл
       final track = tracksWithNotes.first;
       final midiData = await _generateSingleTrackMidi(track, bpm);
       final finalFileName = fileName ?? '${_sanitizeFileName(track.name)}.mid';
@@ -39,7 +38,6 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
         await _saveMidi(midiData, finalFileName);
       }
     } else {
-      // Если несколько дорожек - создаем папку с отдельными файлами
       await _exportMultipleTracks(tracksWithNotes, share, bpm);
     }
   }
@@ -54,12 +52,10 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
     final folderPath = '${tempDir.path}/$folderName';
     final folder = Directory(folderPath);
 
-    // Создаем папку
     await folder.create();
 
-    // Создаем отдельные MIDI файлы для каждой дорожки
     final files = <File>[];
-    for (var track in tracks) {
+    for (final track in tracks) {
       if (track.notes.isEmpty) continue;
 
       final midiData = await _generateSingleTrackMidi(track, bpm);
@@ -71,35 +67,31 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
     }
 
     if (share) {
-      // Для шаринга нескольких файлов создаем ZIP архив
       final zipPath = '${tempDir.path}/$folderName.zip';
       final zipFile = File(zipPath);
 
-      // Создаем ZIP архив
       final encoder = ZipEncoder();
       final archive = Archive();
 
-      for (var file in files) {
+      for (final file in files) {
         final bytes = await file.readAsBytes();
         archive.addFile(
-            ArchiveFile(file.path.split('/').last, bytes.length, bytes));
+          ArchiveFile(file.path.split('/').last, bytes.length, bytes),
+        );
       }
 
       final zipData = encoder.encode(archive);
       if (zipData != null) {
         await zipFile.writeAsBytes(zipData);
 
-        // Шарим ZIP архив
         await Share.shareXFiles(
           [XFile(zipFile.path)],
           text: 'MIDI файлы дорожек из NotRed',
         );
 
-        // Очищаем временные файлы
         await zipFile.delete();
       }
     } else {
-      // Сохраняем папку в Downloads
       if (Platform.isAndroid) {
         final downloadsDir = Directory('/storage/emulated/0/Download');
         if (await downloadsDir.exists()) {
@@ -107,7 +99,7 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
           final destFolder = Directory(destFolderPath);
           await destFolder.create();
 
-          for (var file in files) {
+          for (final file in files) {
             final fileName = file.path.split('/').last;
             await file.copy('$destFolderPath/$fileName');
           }
@@ -115,7 +107,6 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
       }
     }
 
-    // Очищаем временные файлы
     await folder.delete(recursive: true);
   }
 
@@ -131,9 +122,9 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
     final sortedNotes = List.from(track.notes)
       ..sort((a, b) => a.startTick.compareTo(b.startTick));
 
-    for (var note in sortedNotes) {
-      final timeInBeats = note.startTick / 16.0;
-      final durationInBeats = note.durationTicks / 16.0;
+    for (final note in sortedNotes) {
+      final timeInBeats = note.startTick / AppConstants.ticksPerBeat;
+      final durationInBeats = note.durationTicks / AppConstants.ticksPerBeat;
 
       midiFile.addNote(
         track: 0,
@@ -146,8 +137,8 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
     }
 
     final tempDir = await getTemporaryDirectory();
-    final tempFile = File(
-        '${tempDir.path}/temp_${DateTime.now().millisecondsSinceEpoch}.mid');
+    final tempFile =
+        File('${tempDir.path}/temp_${DateTime.now().millisecondsSinceEpoch}.mid');
     await midiFile.writeFile(tempFile);
 
     final bytes = await tempFile.readAsBytes();
@@ -157,7 +148,6 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
   }
 
   String _sanitizeFileName(String name) {
-    // Заменяем русские буквы на латиницу для имени файла
     const cyrillicToLatin = {
       'а': 'a',
       'б': 'b',
@@ -235,7 +225,6 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
       }
     }
 
-    // Заменяем пробелы на подчеркивания и удаляем лишние символы
     return result.replaceAll(' ', '_').replaceAll(RegExp(r'[^\w\-_]'), '');
   }
 

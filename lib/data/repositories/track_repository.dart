@@ -31,14 +31,7 @@ class TrackRepository implements TrackRepositoryInterface {
     final index = _tracks.indexWhere((track) => track.id == id);
     if (index != -1) {
       final track = _tracks[index];
-      final updatedTrack = Track(
-        id: track.id,
-        name: track.name,
-        isMuted: !track.isMuted,
-        color: track.color,
-        notes: track.notes,
-      );
-      _tracks[index] = updatedTrack;
+      _tracks[index] = track.copyWith(isMuted: !track.isMuted);
     }
   }
 }
