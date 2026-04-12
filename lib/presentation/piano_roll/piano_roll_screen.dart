@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
@@ -31,7 +33,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   bool _isRecordingVoice = false;
 
   late ScrollController _timeScaleController;
-  late ScrollController _notesGridController;
   late ScrollController _verticalScrollController;
 
   late int maxTicks;
@@ -45,6 +46,12 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   int? _pendingStartTick;
   int? _pendingPitch;
 
+  Timer? _nrPulseTimer;
+  bool _nrPulseOn = false;
+  bool _nrMetronomeEnabled = false;
+
+  List<MidiNote>? _lastVoiceImportBatch;
+
   @override
   void initState() {
     super.initState();
@@ -57,8 +64,13 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
     ticksPerBar = AppConstants.ticksPerBar;
 
     _timeScaleController = ScrollController();
-    _notesGridController = ScrollController();
     _verticalScrollController = ScrollController();
+
+    _timeScaleController.addListener(() {
+      if (mounted) {
+        setState(() {});
+      }
+    });
 
     _voiceRecorder = VoiceRecorderService();
     _voiceRecorder.initialize();
@@ -73,10 +85,47 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
     _audioService.setTrackInstrument(currentTrack.id, currentTrack.instrument);
   }
 
+  void _toggleNrMetronome() {
+    if (_nrMetronomeEnabled) {
+      _stopNrMetronome();
+    } else {
+      _startNrMetronome();
+    }
+    setState(() {});
+  }
+
+  void _startNrMetronome() {
+    if (_nrMetronomeEnabled) return;
+
+    _nrMetronomeEnabled = true;
+    _nrPulseOn = true;
+
+    final beatMs = (60000 / AppConstants.bpm).round();
+
+    _nrPulseTimer?.cancel();
+    _nrPulseTimer = Timer.periodic(Duration(milliseconds: beatMs), (_) {
+      if (!mounted || !_nrMetronomeEnabled) {
+        _stopNrMetronome();
+        return;
+      }
+
+      setState(() {
+        _nrPulseOn = !_nrPulseOn;
+      });
+    });
+  }
+
+  void _stopNrMetronome() {
+    _nrMetronomeEnabled = false;
+    _nrPulseOn = false;
+    _nrPulseTimer?.cancel();
+    _nrPulseTimer = null;
+  }
+
   @override
   void dispose() {
+    _stopNrMetronome();
     _timeScaleController.dispose();
-    _notesGridController.dispose();
     _verticalScrollController.dispose();
 
     _audioService.stopPlayback();
@@ -95,13 +144,11 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
       if (notes.isNotEmpty) {
         _onVoiceNotesDetected(notes);
       }
-
       return;
     }
 
     try {
       await _voiceRecorder.startRecording();
-
       setState(() {
         _isRecordingVoice = true;
       });
@@ -110,6 +157,8 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
 
   void _onVoiceNotesDetected(List<VoiceNote> notes) {
     setState(() {
+      final importedBatch = <MidiNote>[];
+
       for (final voiceNote in notes) {
         if (voiceNote.pitch < minNote || voiceNote.pitch > maxNote) continue;
 
@@ -123,16 +172,43 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         );
 
         if (!hasConflict) {
-          currentTrack.notes.add(
-            MidiNote(
-              pitch: voiceNote.pitch,
-              startTick: voiceNote.startTick,
-              durationTicks: voiceNote.durationTicks,
-            ),
+          final newNote = MidiNote(
+            pitch: voiceNote.pitch,
+            startTick: voiceNote.startTick,
+            durationTicks: voiceNote.durationTicks,
           );
+
+          currentTrack.notes.add(newNote);
+          importedBatch.add(newNote);
         }
       }
 
+      if (importedBatch.isNotEmpty) {
+        _lastVoiceImportBatch = importedBatch;
+      }
+
+      _sortNotes();
+      widget.onTrackUpdated(currentTrack);
+    });
+  }
+
+  void _undoLastVoiceImport() {
+    final batch = _lastVoiceImportBatch;
+    if (batch == null || batch.isEmpty || _isPlaying || _isRecordingVoice) {
+      return;
+    }
+
+    setState(() {
+      currentTrack.notes.removeWhere((note) {
+        return batch.any(
+          (added) =>
+              added.pitch == note.pitch &&
+              added.startTick == note.startTick &&
+              added.durationTicks == note.durationTicks,
+        );
+      });
+
+      _lastVoiceImportBatch = null;
       _sortNotes();
       widget.onTrackUpdated(currentTrack);
     });
@@ -147,9 +223,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
       return;
     }
 
-    if (currentTrack.notes.isEmpty) {
-      return;
-    }
+    if (currentTrack.notes.isEmpty) return;
 
     _audioService.setTrackInstrument(currentTrack.id, currentTrack.instrument);
 
@@ -249,7 +323,6 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
 
       final actualStart = start <= end ? start : end;
       final actualEnd = start <= end ? end : start;
-
       final durationTicks = (actualEnd - actualStart) + 1;
 
       if (!_canPlaceNote(midiNote, actualStart, durationTicks)) {
@@ -257,13 +330,14 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         return;
       }
 
-      final newNote = MidiNote(
-        pitch: midiNote,
-        startTick: actualStart,
-        durationTicks: durationTicks,
+      currentTrack.notes.add(
+        MidiNote(
+          pitch: midiNote,
+          startTick: actualStart,
+          durationTicks: durationTicks,
+        ),
       );
 
-      currentTrack.notes.add(newNote);
       _sortNotes();
       widget.onTrackUpdated(currentTrack);
 
@@ -296,6 +370,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
             onPressed: () {
               setState(() {
                 currentTrack.notes.clear();
+                _lastVoiceImportBatch = null;
                 _clearPendingSelection();
               });
               widget.onTrackUpdated(currentTrack);
@@ -350,7 +425,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   }
 
   void _scrollLeft() {
-    if (_timeScaleController.hasClients && _notesGridController.hasClients) {
+    if (_timeScaleController.hasClients) {
       final newOffset = (_timeScaleController.offset - AppConstants.barWidth)
           .clamp(0.0, _timeScaleController.position.maxScrollExtent);
 
@@ -359,25 +434,15 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
       );
-      _notesGridController.animateTo(
-        newOffset,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-      );
     }
   }
 
   void _scrollRight() {
-    if (_timeScaleController.hasClients && _notesGridController.hasClients) {
+    if (_timeScaleController.hasClients) {
       final newOffset = (_timeScaleController.offset + AppConstants.barWidth)
           .clamp(0.0, _timeScaleController.position.maxScrollExtent);
 
       _timeScaleController.animateTo(
-        newOffset,
-        duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-      );
-      _notesGridController.animateTo(
         newOffset,
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeInOut,
@@ -387,75 +452,146 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
 
   Widget _buildRoundButton({
     required IconData icon,
-    required VoidCallback onPressed,
+    required VoidCallback? onPressed,
     required Color color,
     String? tooltip,
   }) {
     return Container(
-      margin: const EdgeInsets.only(right: 6),
       width: 40,
       height: 40,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        color: color.withValues(alpha: 0.85),
+        color: color,
       ),
       child: IconButton(
         onPressed: onPressed,
         tooltip: tooltip,
         padding: EdgeInsets.zero,
         splashRadius: 20,
-        icon: Icon(icon, color: Colors.white, size: 20),
+        icon: Icon(
+          icon,
+          color: Colors.white.withValues(alpha: onPressed == null ? 0.45 : 1.0),
+          size: 20,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOutlinedGradientNr() {
+    final duration = Duration(
+      milliseconds: (60000 / AppConstants.bpm / 2).round(),
+    );
+
+    return GestureDetector(
+      onTap: _toggleNrMetronome,
+      child: AnimatedScale(
+        scale: _nrMetronomeEnabled ? (_nrPulseOn ? 1.5 : 1.0) : 1.0,
+        duration: duration,
+        curve: Curves.easeInOut,
+        child: AnimatedOpacity(
+          opacity: _nrMetronomeEnabled ? (_nrPulseOn ? 1.0 : 0.78) : 1.0,
+          duration: duration,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Text(
+                ' NR',
+                style: TextStyle(
+                  fontSize: 30,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: -1.5,
+                  foreground: Paint()
+                    ..style = PaintingStyle.stroke
+                    ..strokeWidth = 2.0
+                    ..color = currentTrack.color,
+                ),
+              ),
+              ShaderMask(
+                shaderCallback: (bounds) => const LinearGradient(
+                  colors: [Colors.red, Colors.purple, Colors.blue],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ).createShader(bounds),
+                child: const Text(
+                  ' NR',
+                  style: TextStyle(
+                    fontSize: 30,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                    letterSpacing: -1.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildBottomToolbar() {
-    return Row(
-      children: [
-        Expanded(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.grey[850],
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: currentTrack.color.withValues(alpha: 0.4),
-              ),
-            ),
-            child: Text(
-              _pendingStartTick == null
-                  ? 'Режим ввода: начало → конец'
-                  : 'Начало: ${_pendingStartTick! + 1} → выбери конец',
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 13,
-              ),
-            ),
+    final canUndo = _lastVoiceImportBatch != null &&
+        _lastVoiceImportBatch!.isNotEmpty &&
+        !_isPlaying &&
+        !_isRecordingVoice;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[850],
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.grey.shade700),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildRoundButton(
+            icon: Icons.undo,
+            onPressed: canUndo ? _undoLastVoiceImport : null,
+            color: currentTrack.color,
+            tooltip: 'Удалить последнюю запись',
           ),
-        ),
-        const SizedBox(width: 12),
-        _buildRoundButton(
-          icon: _isRecordingVoice ? Icons.mic : Icons.mic_none,
-          onPressed: _toggleVoiceRecording,
-          color: _isRecordingVoice ? Colors.red : currentTrack.color,
-          tooltip: _isRecordingVoice ? 'Остановить запись' : 'Записать голос',
-        ),
-      ],
+          const SizedBox(width: 40),
+          _buildRoundButton(
+            icon: _isPlaying ? Icons.stop : Icons.play_arrow,
+            onPressed: _togglePlayback,
+            color: currentTrack.color,
+            tooltip: _isPlaying ? 'Стоп' : 'Воспроизвести',
+          ),
+          const SizedBox(width: 40),
+          _buildRoundButton(
+            icon: _isRecordingVoice ? Icons.mic : Icons.mic_none,
+            onPressed: _toggleVoiceRecording,
+            color: currentTrack.color,
+            tooltip: _isRecordingVoice ? 'Остановить запись' : 'Записать голос',
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final playheadTick = _audioService.currentTick;
+    final horizontalOffset =
+        _timeScaleController.hasClients ? _timeScaleController.offset : 0.0;
 
     return Scaffold(
       backgroundColor: Colors.grey[900],
       appBar: AppBar(
+        leadingWidth: 56,
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 12),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
         title: Text(
           currentTrack.name,
           style: const TextStyle(color: Colors.white),
         ),
-        backgroundColor: currentTrack.color.withValues(alpha: 0.85),
+        backgroundColor: currentTrack.color,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           _buildRoundButton(
@@ -464,13 +600,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
             color: currentTrack.color,
             tooltip: 'Очистить все ноты',
           ),
-          _buildRoundButton(
-            icon: _isPlaying ? Icons.stop : Icons.play_arrow,
-            onPressed: _togglePlayback,
-            color: currentTrack.color,
-            tooltip: _isPlaying ? 'Стоп' : 'Воспроизвести',
-          ),
-          const SizedBox(width: 8),
+          const SizedBox(width: 12),
         ],
       ),
       body: Padding(
@@ -486,48 +616,12 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
                   width: AppConstants.keyAreaWidth - 7,
                   height: 50,
                   decoration: BoxDecoration(
-                    color: Colors.grey[850],
+                    color: Colors.grey[900],
                     borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: currentTrack.color.withValues(alpha: 0.5),
-                    ),
+                    border: Border.all(color: Colors.grey[900]!),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      GestureDetector(
-                        onTap: _scrollLeft,
-                        child: Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: currentTrack.color.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Icon(
-                            Icons.chevron_left,
-                            color: currentTrack.color,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: _scrollRight,
-                        child: Container(
-                          width: 30,
-                          height: 30,
-                          decoration: BoxDecoration(
-                            color: currentTrack.color.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Icon(
-                            Icons.chevron_right,
-                            color: currentTrack.color,
-                            size: 24,
-                          ),
-                        ),
-                      ),
-                    ],
+                  child: Center(
+                    child: _buildOutlinedGradientNr(),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -542,10 +636,10 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
                     child: ListView.builder(
                       scrollDirection: Axis.horizontal,
                       controller: _timeScaleController,
+                      physics: const ClampingScrollPhysics(),
                       itemCount: maxTicks,
                       itemBuilder: (context, index) {
                         final isBarStart = index % ticksPerBar == 0;
-                        final isBeatStart = index % ticksPerBeat == 0;
 
                         return Container(
                           width: AppConstants.noteCellWidth,
@@ -571,17 +665,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
                                     ),
                                   ),
                                 )
-                              : isBeatStart
-                                  ? Center(
-                                      child: Text(
-                                        '${(index % ticksPerBar) ~/ ticksPerBeat + 1}',
-                                        style: TextStyle(
-                                          color: Colors.amber.withValues(alpha: 0.8),
-                                          fontSize: 9,
-                                        ),
-                                      ),
-                                    )
-                                  : null,
+                              : null,
                         );
                       },
                     ),
@@ -615,8 +699,10 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
                               height: 30,
                               decoration: BoxDecoration(
                                 border: Border(
-                                  bottom: BorderSide(color: Colors.grey.shade800),
-                                  right: BorderSide(color: Colors.grey.shade700),
+                                  bottom:
+                                      BorderSide(color: Colors.grey.shade800),
+                                  right:
+                                      BorderSide(color: Colors.grey.shade700),
                                 ),
                                 color: isBlackKey
                                     ? Colors.grey[900]
@@ -641,37 +727,75 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
                               color: Colors.amber,
                             ),
                             Expanded(
-                              child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                controller: _notesGridController,
-                                itemCount: maxTicks,
-                                itemBuilder: (context, tickIndex) {
-                                  final isNotePresent =
-                                      _isNotePresent(midiNote, tickIndex);
-                                  final isPending = _isPendingCell(midiNote, tickIndex);
+                              child: LayoutBuilder(
+                                builder: (context, constraints) {
+                                  final viewportWidth = constraints.maxWidth;
+                                  final firstVisibleTick = (horizontalOffset /
+                                          AppConstants.noteCellWidth)
+                                      .floor()
+                                      .clamp(0, maxTicks - 1);
+                                  final visibleTickCount = (viewportWidth /
+                                              AppConstants.noteCellWidth)
+                                          .ceil() +
+                                      2;
+                                  final lastVisibleTick =
+                                      (firstVisibleTick + visibleTickCount)
+                                          .clamp(0, maxTicks);
 
-                                  return GestureDetector(
-                                    onTap: () => _handleTap(midiNote, tickIndex),
-                                    child: Container(
-                                      width: AppConstants.noteCellWidth,
-                                      height: 30,
-                                      decoration: BoxDecoration(
-                                        color: isPending
-                                            ? Colors.lightGreen.withValues(alpha: 0.55)
-                                            : isNotePresent
-                                                ? currentTrack.color
-                                                    .withValues(alpha: 0.78)
-                                                : Colors.transparent,
-                                        border: Border(
-                                          right: BorderSide(
-                                            color: _getLineColor(tickIndex + 1),
-                                            width: _getLineWidth(tickIndex + 1),
-                                          ),
-                                          bottom: BorderSide(
-                                            color: Colors.grey.shade800,
+                                  final cells = <Widget>[];
+                                  for (int tickIndex = firstVisibleTick;
+                                      tickIndex < lastVisibleTick;
+                                      tickIndex++) {
+                                    final isNotePresent =
+                                        _isNotePresent(midiNote, tickIndex);
+                                    final isPending =
+                                        _isPendingCell(midiNote, tickIndex);
+
+                                    cells.add(
+                                      Positioned(
+                                        left: (tickIndex *
+                                                AppConstants.noteCellWidth) -
+                                            horizontalOffset,
+                                        top: 0,
+                                        width: AppConstants.noteCellWidth,
+                                        height: 30,
+                                        child: GestureDetector(
+                                          onTap: () =>
+                                              _handleTap(midiNote, tickIndex),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: isPending
+                                                  ? Colors.lightGreen
+                                                      .withValues(alpha: 0.55)
+                                                  : isNotePresent
+                                                      ? currentTrack.color
+                                                          .withValues(
+                                                              alpha: 0.78)
+                                                      : Colors.transparent,
+                                              border: Border(
+                                                right: BorderSide(
+                                                  color: _getLineColor(
+                                                      tickIndex + 1),
+                                                  width: _getLineWidth(
+                                                      tickIndex + 1),
+                                                ),
+                                                bottom: BorderSide(
+                                                  color: Colors.grey.shade800,
+                                                ),
+                                              ),
+                                            ),
                                           ),
                                         ),
                                       ),
+                                    );
+                                  }
+
+                                  return SizedBox(
+                                    width: viewportWidth,
+                                    height: 30,
+                                    child: Stack(
+                                      clipBehavior: Clip.hardEdge,
+                                      children: cells,
                                     ),
                                   );
                                 },

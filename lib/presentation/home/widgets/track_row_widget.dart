@@ -185,7 +185,7 @@ class TrackRowWidget extends StatelessWidget {
                       ),
                       ControlButton(
                         icon: Icons.delete_outline,
-                        color: Colors.red,
+                        color: track.color,
                         onPressed: onDeletePressed,
                       ),
                     ],

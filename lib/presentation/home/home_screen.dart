@@ -26,6 +26,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _selectedTrackId;
   Timer? _segmentClearTimer;
 
+  Timer? _titlePulseTimer;
+  bool _titlePulseOn = false;
+
   @override
   void initState() {
     super.initState();
@@ -43,9 +46,15 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _controllerListener() {
-    if (mounted) {
-      setState(() {});
+    if (!mounted) return;
+
+    if (_controller.isPlaying) {
+      _startTitlePulse();
+    } else {
+      _stopTitlePulse();
     }
+
+    setState(() {});
   }
 
   @override
@@ -57,9 +66,34 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void dispose() {
     _segmentClearTimer?.cancel();
+    _titlePulseTimer?.cancel();
     _controller.removeListener(_controllerListener);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _startTitlePulse() {
+    if (_titlePulseTimer != null) return;
+
+    _titlePulseOn = true;
+    final beatMs = (60000 / AppConstants.bpm).round();
+
+    _titlePulseTimer = Timer.periodic(Duration(milliseconds: beatMs), (_) {
+      if (!mounted || !_controller.isPlaying) {
+        _stopTitlePulse();
+        return;
+      }
+
+      setState(() {
+        _titlePulseOn = !_titlePulseOn;
+      });
+    });
+  }
+
+  void _stopTitlePulse() {
+    _titlePulseTimer?.cancel();
+    _titlePulseTimer = null;
+    _titlePulseOn = false;
   }
 
   void _calculateBarWidth() {
@@ -475,6 +509,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildAnimatedTitle() {
+    return AnimatedScale(
+      scale: _controller.isPlaying
+          ? (_titlePulseOn ? 1.12 : 1.0)
+          : 1.0,
+      duration: Duration(
+        milliseconds: (60000 / AppConstants.bpm / 2).round(),
+      ),
+      curve: Curves.easeInOut,
+      child: AnimatedOpacity(
+        opacity: _controller.isPlaying
+            ? (_titlePulseOn ? 1.0 : 0.82)
+            : 1.0,
+        duration: Duration(
+          milliseconds: (60000 / AppConstants.bpm / 2).round(),
+        ),
+        child: ShaderMask(
+          shaderCallback: (bounds) => const LinearGradient(
+            colors: [Colors.red, Colors.purple, Colors.blue],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ).createShader(bounds),
+          child: const Text(
+            'NotRed',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasTracks = _controller.tracks.isNotEmpty;
@@ -522,21 +591,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     child: Row(
                       children: [
-                        ShaderMask(
-                          shaderCallback: (bounds) => const LinearGradient(
-                            colors: [Colors.red, Colors.purple, Colors.blue],
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                          ).createShader(bounds),
-                          child: const Text(
-                            'NotRed',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
+                        _buildAnimatedTitle(),
                         const Spacer(),
                         Container(
                           margin: const EdgeInsets.only(right: 8),
