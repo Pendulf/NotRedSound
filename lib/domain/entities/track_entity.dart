@@ -10,6 +10,16 @@ class MidiNoteEntity {
     required this.startTick,
     required this.durationTicks,
   });
+
+  int get endTick => startTick + durationTicks;
+
+  bool containsTick(int tick) {
+    return tick >= startTick && tick < endTick;
+  }
+
+  bool intersectsRange(int rangeStart, int rangeEnd) {
+    return startTick < rangeEnd && endTick > rangeStart;
+  }
 }
 
 class TrackEntity {
@@ -18,7 +28,8 @@ class TrackEntity {
   final bool isMuted;
   final Color color;
   final List<MidiNoteEntity> notes;
-  String instrument; // ДОБАВЛЯЕМ ПОЛЕ
+  final String instrument;
+  final double volume;
 
   TrackEntity({
     required this.id,
@@ -26,6 +37,7 @@ class TrackEntity {
     this.isMuted = false,
     this.color = Colors.blue,
     List<MidiNoteEntity>? notes,
-    this.instrument = 'Piano', // ЗНАЧЕНИЕ ПО УМОЛЧАНИЮ
+    this.instrument = 'Пианино',
+    this.volume = 1.0,
   }) : notes = notes ?? [];
 }

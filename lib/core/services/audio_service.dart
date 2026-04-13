@@ -12,12 +12,12 @@ import '../constants/app_constants.dart';
 class _ScheduledNoteEvent {
   final int pitch;
   final int channel;
-  final bool isDrums;
+  final int velocity;
 
   const _ScheduledNoteEvent({
     required this.pitch,
     required this.channel,
-    required this.isDrums,
+    required this.velocity,
   });
 }
 
@@ -46,10 +46,10 @@ class AudioService {
 
   int _nextChannel = 0;
 
-  static const int drumsChannel = 9;
+  static const int _drumsChannel = 9;
 
-  final List<int> _availableChannels = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15
+  final List<int> _availableMelodicChannels = [
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15,
   ];
 
   static const Map<String, int> instruments = {
@@ -66,6 +66,29 @@ class AudioService {
   bool get isPlaying => _isPlaying;
   int get currentTick => _currentTick;
   bool get isInitialized => _isInitialized;
+
+  bool _isDrumProgram(int program) => program == 128;
+
+  int _resolvePlaybackProgram(int program) {
+    return _isDrumProgram(program) ? 0 : program;
+  }
+
+  int _allocateMelodicChannel() {
+    final channel =
+        _availableMelodicChannels[_nextChannel % _availableMelodicChannels.length];
+    _nextChannel++;
+    return channel;
+  }
+
+  int _desiredChannelForProgram(int program) {
+    return _isDrumProgram(program) ? _drumsChannel : _allocateMelodicChannel();
+  }
+
+  int _velocityFromTrack(Track track, {required bool isDrums}) {
+    final baseVelocity = isDrums ? 110 : 90;
+    final scaled = (baseVelocity * track.volume).round();
+    return scaled.clamp(1, 127);
+  }
 
   Future<void> initialize() async {
     try {
@@ -89,7 +112,7 @@ class AudioService {
         _isInitialized = true;
         await _midiEngine?.setVolume(volume: 100);
 
-        for (final channel in _availableChannels) {
+        for (final channel in _availableMelodicChannels) {
           await _midiEngine?.changeProgram(program: 0, channel: channel);
         }
       }
@@ -98,50 +121,73 @@ class AudioService {
     }
   }
 
-  int _assignChannelForTrack(String trackId, bool isDrums) {
-    if (_trackChannels.containsKey(trackId)) {
-      return _trackChannels[trackId]!;
-    }
-
-    final channel = isDrums
-        ? drumsChannel
-        : _availableChannels[_nextChannel++ % _availableChannels.length];
-
-    _trackChannels[trackId] = channel;
-    return channel;
-  }
-
   Future<void> setTrackInstrument(String trackId, String instrumentName) async {
     if (!_isInitialized) return;
 
-    final program = instruments[instrumentName] ?? 0;
-    _trackInstruments[trackId] = program;
+    final newProgram = instruments[instrumentName] ?? 0;
+    final oldProgram = _trackInstruments[trackId];
+    final oldWasDrums = oldProgram != null && _isDrumProgram(oldProgram);
+    final newIsDrums = _isDrumProgram(newProgram);
 
-    final isDrums = program == 128;
-    final channel = _assignChannelForTrack(trackId, isDrums);
+    _trackInstruments[trackId] = newProgram;
 
-    if (!isDrums) {
-      await _midiEngine?.changeProgram(program: program, channel: channel);
+    if (_trackChannels.containsKey(trackId) && oldProgram != null) {
+      if (oldWasDrums != newIsDrums) {
+        final oldChannel = _trackChannels[trackId]!;
+        try {
+          await _midiEngine?.stopAllNotes();
+
+          if (!oldWasDrums) {
+            await _midiEngine?.changeProgram(program: 0, channel: oldChannel);
+          }
+        } catch (_) {}
+
+        _trackChannels.remove(trackId);
+      }
     }
+
+    final channel = _trackChannels.putIfAbsent(
+      trackId,
+      () => _desiredChannelForProgram(newProgram),
+    );
+
+    if (!newIsDrums) {
+      await _midiEngine?.changeProgram(
+        program: _resolvePlaybackProgram(newProgram),
+        channel: channel,
+      );
+    }
+  }
+
+  int _channelForTrack(String trackId) {
+    final existing = _trackChannels[trackId];
+    if (existing != null) return existing;
+
+    final program = _trackInstruments[trackId] ?? 0;
+    final channel = _desiredChannelForProgram(program);
+    _trackChannels[trackId] = channel;
+    return channel;
   }
 
   Future<void> playNoteForTrack(String trackId, int pitch) async {
     if (!_isInitialized) return;
 
     final program = _trackInstruments[trackId] ?? 0;
-    final isDrums = program == 128;
-    final channel = _assignChannelForTrack(trackId, isDrums);
+    final isDrums = _isDrumProgram(program);
+    final channel = _channelForTrack(trackId);
 
     try {
       if (!isDrums) {
-        await _midiEngine?.changeProgram(program: program, channel: channel);
+        await _midiEngine?.changeProgram(
+          program: _resolvePlaybackProgram(program),
+          channel: channel,
+        );
       }
 
-      // На превью всегда делаем retrigger
       await _midiEngine?.stopNote(note: pitch, channel: channel);
       await _midiEngine?.playNote(
         note: pitch,
-        velocity: 90,
+        velocity: isDrums ? 110 : 90,
         channel: channel,
       );
     } catch (e) {
@@ -152,9 +198,7 @@ class AudioService {
   Future<void> stopNoteForTrack(String trackId, int pitch) async {
     if (!_isInitialized) return;
 
-    final program = _trackInstruments[trackId] ?? 0;
-    final isDrums = program == 128;
-    final channel = _assignChannelForTrack(trackId, isDrums);
+    final channel = _channelForTrack(trackId);
 
     try {
       await _midiEngine?.stopNote(note: pitch, channel: channel);
@@ -179,45 +223,48 @@ class AudioService {
     _onPlaybackFinishedCallback = onFinished;
     _currentTick = 0;
 
-    _prepareEvents(_tracks);
-    if (_maxTick <= 0) return;
+    _prepareEvents(_tracks).then((_) {
+      if (_maxTick <= 0) return;
 
-    _isPlaying = true;
+      _isPlaying = true;
 
-    _playbackTimer = Timer.periodic(
-      Duration(milliseconds: AppConstants.millisecondsPerTick),
-      (timer) {
-        if (!_isPlaying) {
-          timer.cancel();
-          return;
-        }
+      _playbackTimer = Timer.periodic(
+        Duration(milliseconds: AppConstants.millisecondsPerTick),
+        (timer) {
+          if (!_isPlaying) {
+            timer.cancel();
+            return;
+          }
 
-        _processTick(_currentTick);
+          _processTick(_currentTick);
+          _onTickCallback?.call();
+          _currentTick++;
 
-        _onTickCallback?.call();
-
-        _currentTick++;
-
-        if (_currentTick > _maxTick) {
-          stopPlayback();
-          _onPlaybackFinishedCallback?.call();
-        }
-      },
-    );
+          if (_currentTick > _maxTick) {
+            stopPlayback();
+            _onPlaybackFinishedCallback?.call();
+          }
+        },
+      );
+    });
   }
 
-  void _prepareEvents(List<Track> tracks) {
+  Future<void> _prepareEvents(List<Track> tracks) async {
     _noteOnEvents.clear();
     _noteOffEvents.clear();
     _maxTick = 0;
 
     for (final track in tracks) {
       final program = _trackInstruments[track.id] ?? 0;
-      final isDrums = program == 128;
-      final channel = _assignChannelForTrack(track.id, isDrums);
+      final isDrums = _isDrumProgram(program);
+      final channel = _channelForTrack(track.id);
+      final velocity = _velocityFromTrack(track, isDrums: isDrums);
 
       if (!isDrums) {
-        _midiEngine?.changeProgram(program: program, channel: channel);
+        await _midiEngine?.changeProgram(
+          program: _resolvePlaybackProgram(program),
+          channel: channel,
+        );
       }
 
       for (final note in track.notes) {
@@ -227,20 +274,20 @@ class AudioService {
         final endTick = note.endTick;
 
         _noteOnEvents.putIfAbsent(startTick, () => []).add(
-              _ScheduledNoteEvent(
-                pitch: note.pitch,
-                channel: channel,
-                isDrums: isDrums,
-              ),
-            );
+          _ScheduledNoteEvent(
+            pitch: note.pitch,
+            channel: channel,
+            velocity: velocity,
+          ),
+        );
 
         _noteOffEvents.putIfAbsent(endTick, () => []).add(
-              _ScheduledNoteEvent(
-                pitch: note.pitch,
-                channel: channel,
-                isDrums: isDrums,
-              ),
-            );
+          _ScheduledNoteEvent(
+            pitch: note.pitch,
+            channel: channel,
+            velocity: velocity,
+          ),
+        );
 
         if (endTick > _maxTick) {
           _maxTick = endTick;
@@ -253,21 +300,20 @@ class AudioService {
     final offEvents = _noteOffEvents[tick] ?? const [];
     final onEvents = _noteOnEvents[tick] ?? const [];
 
-    // Сначала всегда OFF, потом ON — это важно для retrigger одинаковых нот
     for (final event in offEvents) {
       _stopNoteOnChannel(event.pitch, event.channel);
     }
 
     for (final event in onEvents) {
-      _playNoteOnChannel(event.pitch, event.channel, event.isDrums);
+      _playNoteOnChannel(event.pitch, event.channel, event.velocity);
     }
   }
 
-  Future<void> _playNoteOnChannel(int pitch, int channel, bool isDrums) async {
+  Future<void> _playNoteOnChannel(int pitch, int channel, int velocity) async {
     try {
       await _midiEngine?.playNote(
         note: pitch,
-        velocity: isDrums ? 110 : 90,
+        velocity: velocity,
         channel: channel,
       );
     } catch (e) {

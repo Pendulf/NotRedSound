@@ -478,56 +478,85 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
   }
 
   Widget _buildOutlinedGradientNr() {
-    final duration = Duration(
-      milliseconds: (60000 / AppConstants.bpm / 2).round(),
-    );
+  final duration = Duration(
+    milliseconds: (60000 / AppConstants.bpm / 2).round(),
+  );
 
-    return GestureDetector(
-      onTap: _toggleNrMetronome,
-      child: AnimatedScale(
-        scale: _nrMetronomeEnabled ? (_nrPulseOn ? 1.5 : 1.0) : 1.0,
+  return GestureDetector(
+    onTap: _toggleNrMetronome,
+    child: AnimatedScale(
+      scale: _nrMetronomeEnabled ? (_nrPulseOn ? 1.5 : 1.0) : 1.0,
+      duration: duration,
+      curve: Curves.easeInOut,
+      child: AnimatedOpacity(
+        opacity: _nrMetronomeEnabled ? (_nrPulseOn ? 1.0 : 0.78) : 1.0,
         duration: duration,
-        curve: Curves.easeInOut,
-        child: AnimatedOpacity(
-          opacity: _nrMetronomeEnabled ? (_nrPulseOn ? 1.0 : 0.78) : 1.0,
-          duration: duration,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              Text(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // Градиентное свечение
+            IgnorePointer(
+              child: AnimatedContainer(
+                duration: duration,
+                width: _nrPulseOn ? 62 : 50,
+                height: _nrPulseOn ? 34 : 26,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(6),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.red.withValues(alpha: _nrPulseOn ? 0.30 : 0.18),
+                      blurRadius: _nrPulseOn ? 26 : 16,
+                      spreadRadius: _nrPulseOn ? 4 : 1,
+                    ),
+                    BoxShadow(
+                      color: Colors.purple.withValues(alpha: _nrPulseOn ? 0.28 : 0.16),
+                      blurRadius: _nrPulseOn ? 34 : 20,
+                      spreadRadius: _nrPulseOn ? 5 : 2,
+                    ),
+                    BoxShadow(
+                      color: Colors.blue.withValues(alpha: _nrPulseOn ? 0.24 : 0.14),
+                      blurRadius: _nrPulseOn ? 42 : 24,
+                      spreadRadius: _nrPulseOn ? 6 : 2,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            Text(
+              ' NR',
+              style: TextStyle(
+                fontSize: 30,
+                fontWeight: FontWeight.bold,
+                letterSpacing: -1.5,
+                foreground: Paint()
+                  ..style = PaintingStyle.stroke
+                  ..strokeWidth = 2.0
+                  ..color = currentTrack.color,
+              ),
+            ),
+            ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Colors.red, Colors.purple, Colors.blue],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(bounds),
+              child: const Text(
                 ' NR',
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.bold,
+                  color: Colors.white,
                   letterSpacing: -1.5,
-                  foreground: Paint()
-                    ..style = PaintingStyle.stroke
-                    ..strokeWidth = 2.0
-                    ..color = currentTrack.color,
                 ),
               ),
-              ShaderMask(
-                shaderCallback: (bounds) => const LinearGradient(
-                  colors: [Colors.red, Colors.purple, Colors.blue],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ).createShader(bounds),
-                child: const Text(
-                  ' NR',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                    letterSpacing: -1.5,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBottomToolbar() {
     final canUndo = _lastVoiceImportBatch != null &&
@@ -579,6 +608,7 @@ class _PianoRollScreenState extends State<PianoRollScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[900],
       appBar: AppBar(
+        scrolledUnderElevation: 0,
         leadingWidth: 56,
         leading: Padding(
           padding: const EdgeInsets.only(left: 12),

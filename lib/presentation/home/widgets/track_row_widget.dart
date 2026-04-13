@@ -11,12 +11,13 @@ class TrackRowWidget extends StatelessWidget {
   final Track track;
   final bool hasBeenOpened;
   final VoidCallback onMutePressed;
+  final VoidCallback onMuteLongPressed;
   final VoidCallback onEditPressed;
   final VoidCallback onDeletePressed;
   final Function(String) onRename;
   final Function(String) onInstrumentChange;
+  final Function(double) onVolumeChanged;
 
-  /// Используется только как источник общего horizontal offset.
   final ScrollController horizontalScrollController;
 
   final List<MidiNote> Function(Track, int) getNotesInBar;
@@ -34,10 +35,12 @@ class TrackRowWidget extends StatelessWidget {
     required this.track,
     required this.hasBeenOpened,
     required this.onMutePressed,
+    required this.onMuteLongPressed,
     required this.onEditPressed,
     required this.onDeletePressed,
     required this.onRename,
     required this.onInstrumentChange,
+    required this.onVolumeChanged,
     required this.horizontalScrollController,
     required this.getNotesInBar,
     required this.getNoteRange,
@@ -65,9 +68,9 @@ class TrackRowWidget extends StatelessWidget {
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'Введите название',
-              hintStyle: TextStyle(color: Colors.grey[500]),
+              hintStyle: TextStyle(color: Colors.grey),
               enabledBorder: UnderlineInputBorder(
-                borderSide: BorderSide(color: Colors.grey[700]!),
+                borderSide: BorderSide(color: Colors.grey.shade700),
               ),
               focusedBorder: const UnderlineInputBorder(
                 borderSide: BorderSide(color: Colors.amber),
@@ -82,8 +85,9 @@ class TrackRowWidget extends StatelessWidget {
             ),
             ElevatedButton(
               onPressed: () {
-                if (controller.text.isNotEmpty) {
-                  onRename(controller.text);
+                final value = controller.text.trim();
+                if (value.isNotEmpty) {
+                  onRename(value);
                   Navigator.pop(context);
                 }
               },
@@ -103,6 +107,33 @@ class TrackRowWidget extends StatelessWidget {
     return horizontalScrollController.offset;
   }
 
+  Widget _buildCompactSlider(BuildContext context) {
+    return Row(
+      children: [
+        const SizedBox(width: 4),
+        Expanded(
+          child: SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              trackHeight: 2,
+              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+              overlayShape: SliderComponentShape.noOverlay,
+              activeTrackColor: track.color,
+              inactiveTrackColor: Colors.white.withValues(alpha: 0.16),
+              thumbColor: track.color,
+            ),
+            child: Slider(
+              value: track.volume,
+              min: 0,
+              max: 1,
+              divisions: 20,
+              onChanged: onVolumeChanged,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final noteRange = getNoteRange(track);
@@ -110,9 +141,9 @@ class TrackRowWidget extends StatelessWidget {
     final ticksPerBar = AppConstants.ticksPerBar;
 
     return Container(
-      height: AppConstants.previewHeight + 65,
+      height: AppConstants.previewHeight + 54,
       decoration: BoxDecoration(
-        color: Colors.grey[850],
+        color: const Color.fromARGB(205, 48, 48, 48),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: track.color.withValues(alpha: 0.5)),
       ),
@@ -121,74 +152,113 @@ class TrackRowWidget extends StatelessWidget {
           Container(
             width: 213,
             decoration: BoxDecoration(
+              color: Colors.grey[850],
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                bottomLeft: Radius.circular(8),
+              ),
               border: Border(right: BorderSide(color: Colors.grey.shade700)),
             ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                GestureDetector(
-                  onTap: () => _showRenameDialog(context),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
-                      vertical: 8,
+                Container(
+                  height: 34,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  decoration: BoxDecoration(
+                    color: track.color.withValues(alpha: 0.18),
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(8),
                     ),
-                    decoration: BoxDecoration(
-                      color: track.color.withValues(alpha: 0.2),
-                      borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(8),
+                    border: Border(
+                      bottom: BorderSide(
+                        color: track.color.withValues(alpha: 0.25),
                       ),
                     ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            track.name,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.bold,
-                              color: track.color,
-                            ),
-                            overflow: TextOverflow.ellipsis,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => _showRenameDialog(context),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  track.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: track.color,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                              Icon(
+                                Icons.edit,
+                                size: 13,
+                                color: track.color.withValues(alpha: 0.7),
+                              ),
+                            ],
                           ),
                         ),
-                        Icon(
-                          Icons.edit,
-                          size: 16,
-                          color: track.color.withValues(alpha: 0.7),
+                      ),
+                      const SizedBox(width: 8),
+                      SizedBox(
+                        width: 88,
+                        child: _buildCompactSlider(context),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: ControlButton(
+                              icon: Icons.list,
+                              color: track.color,
+                              onPressed: () => showInstrumentPickerDialog(
+                                context,
+                                track,
+                                onInstrumentChange,
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: ControlButton(
+                              icon: track.isMuted
+                                  ? Icons.volume_off
+                                  : Icons.volume_up,
+                              color: track.color,
+                              onPressed: onMutePressed,
+                              onLongPress: onMuteLongPressed,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.center,
+                            child: ControlButton(
+                              icon: Icons.delete_outline,
+                              color: track.color,
+                              onPressed: onDeletePressed,
+                            ),
+                          ),
                         ),
                       ],
                     ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                    children: [
-                      ControlButton(
-                        icon: Icons.music_note,
-                        color: track.color,
-                        onPressed: () => showInstrumentPickerDialog(
-                          context,
-                          track,
-                          onInstrumentChange,
-                        ),
-                      ),
-                      ControlButton(
-                        icon:
-                            track.isMuted ? Icons.volume_off : Icons.volume_up,
-                        color: track.isMuted ? Colors.red : track.color,
-                        onPressed: onMutePressed,
-                      ),
-                      ControlButton(
-                        icon: Icons.delete_outline,
-                        color: track.color,
-                        onPressed: onDeletePressed,
-                      ),
-                    ],
                   ),
                 ),
               ],
@@ -196,7 +266,7 @@ class TrackRowWidget extends StatelessWidget {
           ),
           Container(
             width: 2,
-            height: AppConstants.previewHeight + 65,
+            height: AppConstants.previewHeight + 54,
             color: Colors.amber,
           ),
           Expanded(
@@ -237,7 +307,7 @@ class TrackRowWidget extends StatelessWidget {
                           left: (barIndex * AppConstants.barWidth) - offset,
                           top: 0,
                           width: AppConstants.barWidth,
-                          height: AppConstants.previewHeight + 50,
+                          height: AppConstants.previewHeight + 40,
                           child: GestureDetector(
                             onLongPress: () => onBarLongPress(barIndex),
                             onTap: () => onBarTap(barIndex),
@@ -246,26 +316,28 @@ class TrackRowWidget extends StatelessWidget {
                                 border: Border(
                                   right: BorderSide(
                                     color: Colors.grey.shade800,
-                                    width: 1.0,
+                                    width: 1,
                                   ),
                                 ),
-                                color: isSegmentAvailable
-                                    ? track.color.withValues(alpha: 0.15)
-                                    : null,
                               ),
                               child: Stack(
                                 children: [
+                                  if (isSegmentAvailable)
+                                    Positioned.fill(
+                                      child: Container(
+                                        color: track.color.withValues(alpha: 0.15),
+                                      ),
+                                    ),
                                   CustomPaint(
                                     size: Size(
                                       AppConstants.barWidth,
-                                      AppConstants.previewHeight + 50,
+                                      AppConstants.previewHeight + 40,
                                     ),
                                     painter: PatternPainter(
                                       notes: notesInBar,
                                       color: track.color,
                                       barWidth: AppConstants.barWidth,
-                                      previewHeight:
-                                          AppConstants.previewHeight,
+                                      previewHeight: AppConstants.previewHeight,
                                       minNote: noteRange['min']!,
                                       maxNote: noteRange['max']!,
                                       ticksPerBar: ticksPerBar,
@@ -280,8 +352,7 @@ class TrackRowWidget extends StatelessWidget {
                                         height: 3,
                                         decoration: BoxDecoration(
                                           color: track.color,
-                                          borderRadius:
-                                              BorderRadius.circular(2),
+                                          borderRadius: BorderRadius.circular(2),
                                         ),
                                       ),
                                     ),
@@ -297,7 +368,7 @@ class TrackRowWidget extends StatelessWidget {
 
                     return SizedBox(
                       width: viewportWidth,
-                      height: AppConstants.previewHeight + 50,
+                      height: AppConstants.previewHeight + 40,
                       child: Stack(
                         clipBehavior: Clip.hardEdge,
                         children: [

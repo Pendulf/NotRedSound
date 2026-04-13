@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../domain/entities/track_entity.dart';
 
 class MidiNote extends MidiNoteEntity {
@@ -7,16 +8,6 @@ class MidiNote extends MidiNoteEntity {
     required super.startTick,
     required super.durationTicks,
   });
-
-  int get endTick => startTick + durationTicks;
-
-  bool containsTick(int tick) {
-    return tick >= startTick && tick < endTick;
-  }
-
-  bool intersectsRange(int rangeStart, int rangeEnd) {
-    return startTick < rangeEnd && endTick > rangeStart;
-  }
 
   MidiNote copyWith({
     int? pitch,
@@ -55,6 +46,7 @@ class Track extends TrackEntity {
     super.color = Colors.blue,
     List<MidiNote>? notes,
     super.instrument = 'Пианино',
+    super.volume = 1.0,
   }) : super(notes: notes ?? []);
 
   @override
@@ -67,6 +59,7 @@ class Track extends TrackEntity {
     Color? color,
     List<MidiNote>? notes,
     String? instrument,
+    double? volume,
   }) {
     return Track(
       id: id ?? this.id,
@@ -75,6 +68,7 @@ class Track extends TrackEntity {
       color: color ?? this.color,
       notes: notes ?? List<MidiNote>.from(this.notes),
       instrument: instrument ?? this.instrument,
+      volume: volume ?? this.volume,
     );
   }
 
@@ -85,6 +79,7 @@ class Track extends TrackEntity {
       'isMuted': isMuted,
       'color': color.value,
       'instrument': instrument,
+      'volume': volume,
       'notes': notes.map((n) => n.toJson()).toList(),
     };
   }
@@ -96,6 +91,7 @@ class Track extends TrackEntity {
       isMuted: json['isMuted'] as bool? ?? false,
       color: Color(json['color'] as int? ?? Colors.blue.value),
       instrument: json['instrument'] as String? ?? 'Пианино',
+      volume: (json['volume'] as num?)?.toDouble() ?? 1.0,
       notes: (json['notes'] as List<dynamic>? ?? [])
           .map((e) => MidiNote.fromJson(Map<String, dynamic>.from(e)))
           .toList(),

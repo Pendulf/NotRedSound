@@ -294,7 +294,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {});
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
+                    backgroundColor: Colors.blue[800],
                   ),
                   child: const Text('Применить'),
                 ),
@@ -498,8 +498,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return Positioned(
       left: playheadX,
-      top: 0,
-      bottom: 0,
+      top: 10,
+      bottom: 10,
       child: IgnorePointer(
         child: Container(
           width: 3,
@@ -510,39 +510,66 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAnimatedTitle() {
-    return AnimatedScale(
-      scale: _controller.isPlaying
-          ? (_titlePulseOn ? 1.12 : 1.0)
-          : 1.0,
-      duration: Duration(
-        milliseconds: (60000 / AppConstants.bpm / 2).round(),
-      ),
-      curve: Curves.easeInOut,
-      child: AnimatedOpacity(
-        opacity: _controller.isPlaying
-            ? (_titlePulseOn ? 1.0 : 0.82)
-            : 1.0,
-        duration: Duration(
-          milliseconds: (60000 / AppConstants.bpm / 2).round(),
+  final pulseDuration = Duration(
+    milliseconds: (60000 / AppConstants.bpm / 2).round(),
+  );
+
+  return Stack(
+    alignment: Alignment.centerLeft,
+    children: [
+      IgnorePointer(
+        child: Container(
+          width: 90,
+          height: 20,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.red.withValues(alpha: 0.22),
+                blurRadius: 18,
+                spreadRadius: 2,
+              ),
+              BoxShadow(
+                color: Colors.purple.withValues(alpha: 0.20),
+                blurRadius: 24,
+                spreadRadius: 3,
+              ),
+              BoxShadow(
+                color: Colors.blue.withValues(alpha: 0.18),
+                blurRadius: 30,
+                spreadRadius: 4,
+              ),
+            ],
+          ),
         ),
-        child: ShaderMask(
-          shaderCallback: (bounds) => const LinearGradient(
-            colors: [Colors.red, Colors.purple, Colors.blue],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ).createShader(bounds),
-          child: const Text(
-            'NotRed',
-            style: TextStyle(
-              fontSize: 28,
-              fontWeight: FontWeight.bold,
-              color: Colors.white,
+      ),
+      AnimatedScale(
+        scale: _controller.isPlaying ? (_titlePulseOn ? 1.12 : 1.0) : 1.0,
+        duration: pulseDuration,
+        curve: Curves.easeInOut,
+        child: AnimatedOpacity(
+          opacity: _controller.isPlaying ? (_titlePulseOn ? 1.0 : 0.82) : 1.0,
+          duration: pulseDuration,
+          child: ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Colors.red, Colors.purple, Colors.blue],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ).createShader(bounds),
+            child: const Text(
+              'NotRed',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
             ),
           ),
         ),
       ),
-    );
-  }
+    ],
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -580,6 +607,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     decoration: BoxDecoration(
                       color: Colors.grey[850]?.withValues(alpha: 0.8),
+                      border: Border.all(color: const Color.fromRGBO(21, 101, 192, 1), width: 1),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
@@ -621,7 +649,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: ElevatedButton.styleFrom(
                               shape: const CircleBorder(),
                               padding: const EdgeInsets.all(12),
-                              backgroundColor: Colors.deepPurple,
+                              backgroundColor: Colors.blue[800],
                               foregroundColor: Colors.white,
                             ),
                             child: Icon(
@@ -638,7 +666,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: ElevatedButton.styleFrom(
                               shape: const CircleBorder(),
                               padding: const EdgeInsets.all(12),
-                              backgroundColor: Colors.deepPurple,
+                              backgroundColor: Colors.blue[800],
                               foregroundColor: Colors.white,
                             ),
                             child: const Icon(Icons.save),
@@ -649,7 +677,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: ElevatedButton.styleFrom(
                             shape: const CircleBorder(),
                             padding: const EdgeInsets.all(12),
-                            backgroundColor: Colors.deepPurple,
+                            backgroundColor: Colors.blue[800],
                             foregroundColor: Colors.white,
                           ),
                           child: const Icon(Icons.share),
@@ -666,7 +694,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 200,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.deepPurple.withValues(alpha: 0.9),
+                          color: const Color.fromRGBO(21, 101, 192, 1).withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Material(
@@ -722,13 +750,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                   return Container(
                                     width: AppConstants.barWidth,
                                     alignment: Alignment.center,
-                                    decoration: const BoxDecoration(
-                                      border: Border(
-                                        right: BorderSide(
-                                          color: Colors.amber,
-                                          width: 2,
-                                        ),
-                                      ),
+                                    decoration: BoxDecoration(
+                                      border: index == AppConstants.maxBars - 1
+                                          ? null
+                                          : const Border(
+                                              right: BorderSide(
+                                                color: Colors.amber,
+                                                width: 2,
+                                              ),
+                                            ),
                                     ),
                                     child: Text(
                                       '${index + 1}',
@@ -772,8 +802,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 12),
                 ],
+                const SizedBox(height: 12),
                 Expanded(
                   child: hasTracks
                       ? Container(
@@ -785,6 +815,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             controller: _controller.verticalScrollController,
                             child: ListView.builder(
                               controller: _controller.verticalScrollController,
+                              padding: EdgeInsets.zero,
                               itemCount: _controller.tracks.length,
                               itemBuilder: (context, index) {
                                 final track = _controller.tracks[index];
@@ -803,6 +834,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                       _controller.toggleMute(track.id);
                                       setState(() {});
                                     },
+                                    onMuteLongPressed: () {
+                                      _controller.soloOrResetMute(track.id);
+                                      setState(() {});
+                                    },
                                     onEditPressed: () => _openPianoRoll(track),
                                     onDeletePressed: () {
                                       _controller.deleteTrack(track.id);
@@ -817,6 +852,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                         track.id,
                                         instrument,
                                       );
+                                      setState(() {});
+                                    },
+                                    onVolumeChanged: (value) {
+                                      _controller.updateTrackVolume(track.id, value);
                                       setState(() {});
                                     },
                                     horizontalScrollController:
@@ -892,7 +931,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(fontSize: 18),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: Colors.blue[800],
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(
                 horizontal: 32,

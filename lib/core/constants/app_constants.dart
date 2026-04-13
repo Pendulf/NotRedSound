@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  static const int beatsPerBar = 4; // 4/4
-  static const int ticksPerBeat = 4; // 4 тика на четверть
-  // ИТОГО: 16 тиков на такт
+  static const int beatsPerBar = 4;
+  static const int ticksPerBeat = 4;
 
   static int bpm = 60;
   static int totalBars = 20;
@@ -16,13 +15,14 @@ class AppConstants {
   static const double previewHeight = 40;
   static const double horizontalPadding = 16;
 
-  static const int minNote = 48;
+  // Было C3 = 48, стало C2 = 36
+  static const int minNote = 36;
   static const int maxNote = 84;
 
   static const double noteCellWidth = 35;
   static const double keyAreaWidth = 90;
 
-  static const int defaultNoteDurationTicks = 1; // 1/16
+  static const int defaultNoteDurationTicks = 1;
   static const int minNoteDurationTicks = 1;
 
   static const Color backgroundColor = Color(0xFF121212);

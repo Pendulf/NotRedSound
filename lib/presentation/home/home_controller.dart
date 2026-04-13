@@ -212,6 +212,7 @@ class HomeController extends ChangeNotifier {
       color: Colors.primaries[tracks.length % Colors.primaries.length],
       notes: [],
       instrument: 'Пианино',
+      volume: 1.0,
     );
     _repository.addTrack(newTrack);
     notifyListeners();
@@ -231,6 +232,30 @@ class HomeController extends ChangeNotifier {
 
   void toggleMute(String id) {
     _repository.toggleMute(id);
+    notifyListeners();
+  }
+
+  void soloOrResetMute(String id) {
+    final targetTrack = _findTrack(id);
+    if (targetTrack == null) return;
+
+    if (targetTrack.isMuted) {
+      for (final track in tracks) {
+        if (track.isMuted) {
+          _repository.updateTrack(track.copyWith(isMuted: false));
+        }
+      }
+      notifyListeners();
+      return;
+    }
+
+    for (final track in tracks) {
+      final shouldMute = track.id != id;
+      if (track.isMuted != shouldMute) {
+        _repository.updateTrack(track.copyWith(isMuted: shouldMute));
+      }
+    }
+
     notifyListeners();
   }
 
@@ -257,6 +282,16 @@ class HomeController extends ChangeNotifier {
     if (track == null) return;
 
     _repository.updateTrack(track.copyWith(instrument: instrument));
+    notifyListeners();
+  }
+
+  void updateTrackVolume(String id, double volume) {
+    final track = _findTrack(id);
+    if (track == null) return;
+
+    _repository.updateTrack(
+      track.copyWith(volume: volume.clamp(0.0, 1.0)),
+    );
     notifyListeners();
   }
 
