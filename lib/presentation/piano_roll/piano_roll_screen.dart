@@ -618,18 +618,19 @@ class _PianoRollScreenState extends State<PianoRollScreen>
     _audioService.setTrackInstrument(currentTrack.id, currentTrack.instrument);
 
     _audioService.startPlayback(
-      [currentTrack],
-      onTick: () {
-        if (mounted) setState(() {});
-      },
-      onFinished: () {
-        if (mounted) {
-          setState(() {
-            _isPlaying = false;
-          });
-        }
-      },
-    );
+  [currentTrack],
+  startTick: _recordStartTick,
+  onTick: () {
+    if (mounted) setState(() {});
+  },
+  onFinished: () {
+    if (mounted) {
+      setState(() {
+        _isPlaying = false;
+      });
+    }
+  },
+);
 
     setState(() {
       _isPlaying = true;
@@ -840,7 +841,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
     required VoidCallback? onPressed,
     VoidCallback? onLongPress,
     required Color color,
-    String? tooltip,
+
   }) {
     return Container(
       width: 40,
@@ -852,7 +853,6 @@ class _PianoRollScreenState extends State<PianoRollScreen>
       child: IconButton(
         onPressed: onPressed,
         onLongPress: onLongPress,
-        tooltip: tooltip,
         padding: EdgeInsets.zero,
         splashRadius: 20,
         icon: Icon(
@@ -919,8 +919,6 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                   ),
                   child: IconButton(
                     onPressed: _toggleVoiceRecording,
-                    tooltip:
-                        _isRecordingVoice ? 'Остановить запись' : 'Записать голос',
                     padding: EdgeInsets.zero,
                     splashRadius: 28,
                     icon: Icon(
@@ -1023,15 +1021,11 @@ class _PianoRollScreenState extends State<PianoRollScreen>
         ScaleAutotune.isEnabled ? currentTrack.color : currentTrack.color;
 
     return GestureDetector(
-      onTap: _toggleAutotune,
-      onLongPress: _showScalePicker,
+      onTap: _showScalePicker,
+      onLongPress: _toggleAutotune,
       child: Container(
-        width: 40,
-        height: 40,
-        child: Center(
-          child: Container(
-            width: 28,
-            height: 28,
+            width: 35,
+            height: 35,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: innerColor,
@@ -1042,8 +1036,8 @@ class _PianoRollScreenState extends State<PianoRollScreen>
               size: 20,
             ),
           ),
-        ),
-      ),
+        
+      
     );
   }
 
@@ -1058,27 +1052,22 @@ class _PianoRollScreenState extends State<PianoRollScreen>
           onPressed: notesEnabled ? _handleMergeSplitAction : null,
           onLongPress: notesEnabled ? _toggleMergeSplitMode : null,
           color: currentTrack.color,
-          tooltip: _splitMode
-              ? 'Разделить все ноты на 1/16'
-              : 'Склеить соседние одинаковые ноты',
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 20),
         _buildRoundButton(
           icon: Icons.undo,
           onPressed: _canUndo ? _undoLastAction : null,
           color: currentTrack.color,
-          tooltip: 'Отменить последнее действие',
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 20),
         _buildMicButton(),
-        const SizedBox(width: 16),
+        const SizedBox(width: 20),
         _buildRoundButton(
           icon: _isPlaying ? Icons.stop : Icons.play_arrow,
           onPressed: notesEnabled ? _togglePlayback : null,
           color: currentTrack.color,
-          tooltip: _isPlaying ? 'Стоп' : 'Воспроизвести',
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: 20),
         _buildRoundButton(
           icon: _octaveShiftUpMode
               ? Icons.keyboard_double_arrow_up
@@ -1086,9 +1075,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
           onPressed: notesEnabled ? _shiftAllNotesByOctave : null,
           onLongPress: notesEnabled ? _toggleOctaveShiftMode : null,
           color: currentTrack.color,
-          tooltip: _octaveShiftUpMode
-              ? 'Поднять все ноты на октаву'
-              : 'Опустить все ноты на октаву',
+       
         ),
       ],
     );
@@ -1119,34 +1106,60 @@ class _PianoRollScreenState extends State<PianoRollScreen>
           ),
           Scaffold(
             backgroundColor: Colors.transparent,
-            appBar: AppBar(
-              scrolledUnderElevation: 0,
-              leadingWidth: 56,
-              leading: Padding(
-                padding: const EdgeInsets.only(left: 12),
-                child: IconButton(
-                  icon: const Icon(Icons.arrow_back),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
-              ),
-              title: Text(
-                currentTrack.name,
-                style: const TextStyle(color: Colors.white),
-              ),
-              backgroundColor: currentTrack.color,
-              iconTheme: const IconThemeData(color: Colors.white),
-              actions: [
-                _buildAutotuneButton(),
-                const SizedBox(width: 4),
-                _buildRoundButton(
-                  icon: Icons.delete,
-                  onPressed: notesEnabled ? _clearAllNotes : null,
-                  color: currentTrack.color,
-                  tooltip: 'Очистить все ноты',
-                ),
-                const SizedBox(width: 12),
-              ],
+            appBar: PreferredSize(
+  preferredSize: const Size.fromHeight(86),
+  child: SafeArea(
+    bottom: false,
+    child: Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppConstants.horizontalPadding,
+        vertical: 8,
+      ),
+      child: Container(
+        height: 58,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        decoration: BoxDecoration(
+          color: currentTrack.color.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.3),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
             ),
+          ],
+        ),
+        child: Row(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.arrow_back, color: Colors.white),
+              onPressed: () => Navigator.of(context).pop(),
+              splashRadius: 22,
+            ),
+            Expanded(
+              child: Text(
+                currentTrack.name,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            _buildAutotuneButton(),
+            const SizedBox(width: 12),
+            _buildRoundButton(
+              icon: Icons.delete,
+              onPressed: notesEnabled ? _clearAllNotes : null,
+              color: currentTrack.color,
+            ),
+          ],
+        ),
+      ),
+    ),
+  ),
+),
             body: Padding(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppConstants.horizontalPadding,
