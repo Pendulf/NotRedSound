@@ -188,12 +188,51 @@ class _HomeScreenState extends State<HomeScreen> {
     _selectedTrackId = null;
   }
 
+  int _roundToNearestFive(int value) {
+    return ((value / 5).round() * 5).clamp(40, 240);
+  }
+
   void _showBpmSettings() {
     showDialog(
       context: context,
       builder: (context) {
         int tempBpm = AppConstants.bpm;
         int tempBars = AppConstants.totalBars;
+
+        DateTime? lastTapTime;
+        final List<int> tapIntervalsMs = [];
+
+        void handleTapTempo(void Function(void Function()) setState) {
+          final now = DateTime.now();
+
+          if (lastTapTime == null) {
+            lastTapTime = now;
+            return;
+          }
+
+          final diff = now.difference(lastTapTime!).inMilliseconds;
+          lastTapTime = now;
+
+          if (diff < 120 || diff > 2000) {
+            tapIntervalsMs.clear();
+            return;
+          }
+
+          tapIntervalsMs.add(diff);
+
+          if (tapIntervalsMs.length > 6) {
+            tapIntervalsMs.removeAt(0);
+          }
+
+          final averageMs =
+              tapIntervalsMs.reduce((a, b) => a + b) / tapIntervalsMs.length;
+
+          final calculatedBpm = _roundToNearestFive((60000 / averageMs).round());
+
+          setState(() {
+            tempBpm = calculatedBpm;
+          });
+        }
 
         return StatefulBuilder(
           builder: (context, setState) {
@@ -222,14 +261,26 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                       Expanded(
-                        child: Text(
-                          '$tempBpm',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
+                        child: Center(
+                          child: GestureDetector(
+                            onTap: () => handleTapTempo(setState),
+                            child: Container(
+                              color: Colors.transparent,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 8,
+                              ),
+                              child: Text(
+                                '$tempBpm',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 24,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ),
                           ),
-                          textAlign: TextAlign.center,
                         ),
                       ),
                       IconButton(
@@ -241,6 +292,14 @@ class _HomeScreenState extends State<HomeScreen> {
                         },
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Тапай по цифрам в своём ритме',
+                    style: TextStyle(
+                      color: Colors.white38,
+                      fontSize: 12,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   const Text(
@@ -294,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {});
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue[800],
+                    backgroundColor: Colors.deepPurple,
                   ),
                   child: const Text('Применить'),
                 ),
@@ -510,66 +569,66 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildAnimatedTitle() {
-  final pulseDuration = Duration(
-    milliseconds: (60000 / AppConstants.bpm / 2).round(),
-  );
+    final pulseDuration = Duration(
+      milliseconds: (60000 / AppConstants.bpm / 2).round(),
+    );
 
-  return Stack(
-    alignment: Alignment.centerLeft,
-    children: [
-      IgnorePointer(
-        child: Container(
-          width: 90,
-          height: 20,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.red.withValues(alpha: 0.22),
-                blurRadius: 18,
-                spreadRadius: 2,
-              ),
-              BoxShadow(
-                color: Colors.purple.withValues(alpha: 0.20),
-                blurRadius: 24,
-                spreadRadius: 3,
-              ),
-              BoxShadow(
-                color: Colors.blue.withValues(alpha: 0.18),
-                blurRadius: 30,
-                spreadRadius: 4,
-              ),
-            ],
+    return Stack(
+      alignment: Alignment.centerLeft,
+      children: [
+        IgnorePointer(
+          child: Container(
+            width: 118,
+            height: 34,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(10),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.red.withValues(alpha: 0.22),
+                  blurRadius: 18,
+                  spreadRadius: 2,
+                ),
+                BoxShadow(
+                  color: Colors.purple.withValues(alpha: 0.20),
+                  blurRadius: 24,
+                  spreadRadius: 3,
+                ),
+                BoxShadow(
+                  color: Colors.blue.withValues(alpha: 0.18),
+                  blurRadius: 30,
+                  spreadRadius: 4,
+                ),
+              ],
+            ),
           ),
         ),
-      ),
-      AnimatedScale(
-        scale: _controller.isPlaying ? (_titlePulseOn ? 1.12 : 1.0) : 1.0,
-        duration: pulseDuration,
-        curve: Curves.easeInOut,
-        child: AnimatedOpacity(
-          opacity: _controller.isPlaying ? (_titlePulseOn ? 1.0 : 0.82) : 1.0,
+        AnimatedScale(
+          scale: _controller.isPlaying ? (_titlePulseOn ? 1.12 : 1.0) : 1.0,
           duration: pulseDuration,
-          child: ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [Colors.red, Colors.purple, Colors.blue],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ).createShader(bounds),
-            child: const Text(
-              'NotRed',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
+          curve: Curves.easeInOut,
+          child: AnimatedOpacity(
+            opacity: _controller.isPlaying ? (_titlePulseOn ? 1.0 : 0.82) : 1.0,
+            duration: pulseDuration,
+            child: ShaderMask(
+              shaderCallback: (bounds) => const LinearGradient(
+                colors: [Colors.red, Colors.purple, Colors.blue],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ).createShader(bounds),
+              child: const Text(
+                'NotRed',
+                style: TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
               ),
             ),
           ),
         ),
-      ),
-    ],
-  );
-}
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -606,9 +665,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       vertical: 12,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.grey[850]?.withValues(alpha: 0.8),
-                      border: Border.all(color: const Color.fromRGBO(21, 101, 192, 1), width: 1),
+                      color: const Color.fromARGB(255, 34, 34, 34)?.withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.deepPurple, width: 1),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withValues(alpha: 0.3),
@@ -633,8 +692,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                 return;
                               }
 
-                              final hasNotes = _controller.tracks
-                                  .any((t) => t.notes.isNotEmpty);
+                              final hasNotes =
+                                  _controller.tracks.any((t) => t.notes.isNotEmpty);
                               if (!hasNotes) {
                                 _showSnackBar(
                                   'Нет нот для воспроизведения',
@@ -649,13 +708,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: ElevatedButton.styleFrom(
                               shape: const CircleBorder(),
                               padding: const EdgeInsets.all(12),
-                              backgroundColor: Colors.blue[800],
+                              backgroundColor: Colors.deepPurple,
                               foregroundColor: Colors.white,
                             ),
                             child: Icon(
-                              _controller.isPlaying
-                                  ? Icons.stop
-                                  : Icons.play_arrow,
+                              _controller.isPlaying ? Icons.stop : Icons.play_arrow,
                             ),
                           ),
                         ),
@@ -666,7 +723,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             style: ElevatedButton.styleFrom(
                               shape: const CircleBorder(),
                               padding: const EdgeInsets.all(12),
-                              backgroundColor: Colors.blue[800],
+                              backgroundColor: Colors.deepPurple,
                               foregroundColor: Colors.white,
                             ),
                             child: const Icon(Icons.save),
@@ -677,7 +734,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: ElevatedButton.styleFrom(
                             shape: const CircleBorder(),
                             padding: const EdgeInsets.all(12),
-                            backgroundColor: Colors.blue[800],
+                            backgroundColor: Colors.deepPurple,
                             foregroundColor: Colors.white,
                           ),
                           child: const Icon(Icons.share),
@@ -694,7 +751,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         width: 200,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: const Color.fromRGBO(21, 101, 192, 1).withValues(alpha: 0.9),
+                          color: Colors.deepPurple.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Material(
@@ -820,16 +877,13 @@ class _HomeScreenState extends State<HomeScreen> {
                               itemBuilder: (context, index) {
                                 final track = _controller.tracks[index];
                                 final trackSegment =
-                                    _selectedTrackId == track.id
-                                        ? _selectedSegment
-                                        : null;
+                                    _selectedTrackId == track.id ? _selectedSegment : null;
 
                                 return Padding(
                                   padding: const EdgeInsets.only(bottom: 16),
                                   child: TrackRowWidget(
                                     track: track,
-                                    hasBeenOpened: _controller.openedTracks
-                                        .contains(track.id),
+                                    hasBeenOpened: _controller.openedTracks.contains(track.id),
                                     onMutePressed: () {
                                       _controller.toggleMute(track.id);
                                       setState(() {});
@@ -848,10 +902,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       setState(() {});
                                     },
                                     onInstrumentChange: (instrument) {
-                                      _controller.updateTrackInstrument(
-                                        track.id,
-                                        instrument,
-                                      );
+                                      _controller.updateTrackInstrument(track.id, instrument);
                                       setState(() {});
                                     },
                                     onVolumeChanged: (value) {
@@ -865,8 +916,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     currentSegment: trackSegment,
                                     onBarLongPress: (barIndex) =>
                                         _onBarLongPress(track, barIndex),
-                                    onBarTap: (barIndex) =>
-                                        _onBarTap(track, barIndex),
+                                    onBarTap: (barIndex) => _onBarTap(track, barIndex),
                                     playheadTick: _controller.currentTick,
                                     isPlaying: _controller.isPlaying,
                                   ),
@@ -931,7 +981,7 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(fontSize: 18),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue[800],
+              backgroundColor: Colors.deepPurple,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(
                 horizontal: 32,

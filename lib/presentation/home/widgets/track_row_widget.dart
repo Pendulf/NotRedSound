@@ -143,7 +143,7 @@ class TrackRowWidget extends StatelessWidget {
     return Container(
       height: AppConstants.previewHeight + 54,
       decoration: BoxDecoration(
-        color: const Color.fromARGB(205, 48, 48, 48),
+        color: const Color.fromARGB(205, 34, 34, 34),
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: track.color.withValues(alpha: 0.5)),
       ),
@@ -152,7 +152,7 @@ class TrackRowWidget extends StatelessWidget {
           Container(
             width: 213,
             decoration: BoxDecoration(
-              color: Colors.grey[850],
+              color: const Color.fromARGB(255, 20, 20, 20),
               borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(8),
                 bottomLeft: Radius.circular(8),
