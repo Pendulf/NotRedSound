@@ -85,9 +85,8 @@ class AudioService {
   }
 
   int _velocityFromTrack(Track track, {required bool isDrums}) {
-    final baseVelocity = isDrums ? 110 : 90;
-    final scaled = (baseVelocity * track.volume).round();
-    return scaled.clamp(1, 127);
+    const baseVelocity = 100;
+    return (isDrums ? 115 : baseVelocity).clamp(1, 127);
   }
 
   Future<void> initialize() async {
@@ -208,96 +207,96 @@ class AudioService {
   }
 
   void startPlayback(
-  List<Track> tracks, {
-  int startTick = 0,
-  VoidCallback? onTick,
-  VoidCallback? onFinished,
-}) {
-  if (!_isInitialized) return;
+    List<Track> tracks, {
+    int startTick = 0,
+    VoidCallback? onTick,
+    VoidCallback? onFinished,
+  }) {
+    if (!_isInitialized) return;
 
-  stopPlayback();
+    stopPlayback();
 
-  _tracks = tracks.where((t) => !t.isMuted && t.notes.isNotEmpty).toList();
-  if (_tracks.isEmpty) return;
+    _tracks = tracks.where((t) => !t.isMuted && t.notes.isNotEmpty).toList();
+    if (_tracks.isEmpty) return;
 
-  _onTickCallback = onTick;
-  _onPlaybackFinishedCallback = onFinished;
-  _currentTick = startTick < 0 ? 0 : startTick;
+    _onTickCallback = onTick;
+    _onPlaybackFinishedCallback = onFinished;
+    _currentTick = startTick < 0 ? 0 : startTick;
 
-  _prepareEvents(_tracks, _currentTick).then((_) {
-    if (_maxTick <= 0) return;
+    _prepareEvents(_tracks, _currentTick).then((_) {
+      if (_maxTick <= 0) return;
 
-    _isPlaying = true;
+      _isPlaying = true;
 
-    _playbackTimer = Timer.periodic(
-      Duration(milliseconds: AppConstants.millisecondsPerTick),
-      (timer) {
-        if (!_isPlaying) {
-          timer.cancel();
-          return;
-        }
+      _playbackTimer = Timer.periodic(
+        Duration(milliseconds: AppConstants.millisecondsPerTick),
+        (timer) {
+          if (!_isPlaying) {
+            timer.cancel();
+            return;
+          }
 
-        _processTick(_currentTick);
-        _onTickCallback?.call();
-        _currentTick++;
+          _processTick(_currentTick);
+          _onTickCallback?.call();
+          _currentTick++;
 
-        if (_currentTick > _maxTick) {
-          stopPlayback();
-          _onPlaybackFinishedCallback?.call();
-        }
-      },
-    );
-  });
-}
+          if (_currentTick > _maxTick) {
+            stopPlayback();
+            _onPlaybackFinishedCallback?.call();
+          }
+        },
+      );
+    });
+  }
 
   Future<void> _prepareEvents(List<Track> tracks, int startTick) async {
-  _noteOnEvents.clear();
-  _noteOffEvents.clear();
-  _maxTick = 0;
+    _noteOnEvents.clear();
+    _noteOffEvents.clear();
+    _maxTick = 0;
 
-  for (final track in tracks) {
-    final program = _trackInstruments[track.id] ?? 0;
-    final isDrums = _isDrumProgram(program);
-    final channel = _channelForTrack(track.id);
-    final velocity = _velocityFromTrack(track, isDrums: isDrums);
+    for (final track in tracks) {
+      final program = _trackInstruments[track.id] ?? 0;
+      final isDrums = _isDrumProgram(program);
+      final channel = _channelForTrack(track.id);
+      final velocity = _velocityFromTrack(track, isDrums: isDrums);
 
-    if (!isDrums) {
-      await _midiEngine?.changeProgram(
-        program: _resolvePlaybackProgram(program),
-        channel: channel,
-      );
-    }
-
-    for (final note in track.notes) {
-      if (note.durationTicks <= 0) continue;
-
-      final noteStartTick = note.startTick;
-      final noteEndTick = note.endTick;
-
-      if (noteEndTick < startTick) continue;
-
-      _noteOnEvents.putIfAbsent(noteStartTick, () => []).add(
-        _ScheduledNoteEvent(
-          pitch: note.pitch,
+      if (!isDrums) {
+        await _midiEngine?.changeProgram(
+          program: _resolvePlaybackProgram(program),
           channel: channel,
-          velocity: velocity,
-        ),
-      );
+        );
+      }
 
-      _noteOffEvents.putIfAbsent(noteEndTick, () => []).add(
-        _ScheduledNoteEvent(
-          pitch: note.pitch,
-          channel: channel,
-          velocity: velocity,
-        ),
-      );
+      for (final note in track.notes) {
+        if (note.durationTicks <= 0) continue;
 
-      if (noteEndTick > _maxTick) {
-        _maxTick = noteEndTick;
+        final noteStartTick = note.startTick;
+        final noteEndTick = note.endTick;
+
+        if (noteEndTick < startTick) continue;
+
+        _noteOnEvents.putIfAbsent(noteStartTick, () => []).add(
+          _ScheduledNoteEvent(
+            pitch: note.pitch,
+            channel: channel,
+            velocity: velocity,
+          ),
+        );
+
+        _noteOffEvents.putIfAbsent(noteEndTick, () => []).add(
+          _ScheduledNoteEvent(
+            pitch: note.pitch,
+            channel: channel,
+            velocity: velocity,
+          ),
+        );
+
+        if (noteEndTick > _maxTick) {
+          _maxTick = noteEndTick;
+        }
       }
     }
   }
-}
 
   void _processTick(int tick) {
     final offEvents = _noteOffEvents[tick] ?? const [];

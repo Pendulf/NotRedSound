@@ -21,7 +21,7 @@ class ScaleAutotune {
     'Минор': [0, 2, 3, 5, 7, 8, 10],
   };
 
-  static bool isEnabled = true;
+  static bool isEnabled = false;
   static int selectedRoot = 0;
   static String selectedMode = 'Минор';
 
