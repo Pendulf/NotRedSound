@@ -30,6 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _titlePulseOn = false;
 
   final List<List<Track>> _history = [];
+  final List<List<Track>> _redoHistory = [];
 
   @override
   void initState() {
@@ -97,13 +98,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _pushHistory() {
-    _history.add(_cloneTracks(_controller.tracks));
-    if (_history.length > 100) {
-      _history.removeAt(0);
-    }
+  _history.add(_cloneTracks(_controller.tracks));
+  _redoHistory.clear();
+
+  if (_history.length > 100) {
+    _history.removeAt(0);
   }
+}
 
   bool get _canUndo => _history.isNotEmpty && !_controller.isPlaying;
+  bool get _canRedo => _redoHistory.isNotEmpty && !_controller.isPlaying;
 
   void _restoreTracksFromSnapshot(List<Track> snapshot) {
     final repoTracks = _repository.getTracks().cast<Track>();
@@ -116,11 +120,20 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _undoLastAction() {
-    if (!_canUndo) return;
-    final snapshot = _history.removeLast();
-    _restoreTracksFromSnapshot(snapshot);
-  }
+  if (!_canUndo) return;
 
+  _redoHistory.add(_cloneTracks(_controller.tracks));
+  final snapshot = _history.removeLast();
+  _restoreTracksFromSnapshot(snapshot);
+}
+
+void _redoLastAction() {
+  if (!_canRedo) return;
+
+  _history.add(_cloneTracks(_controller.tracks));
+  final snapshot = _redoHistory.removeLast();
+  _restoreTracksFromSnapshot(snapshot);
+}
   void _startTitlePulse() {
     if (_titlePulseTimer != null) return;
 
@@ -700,34 +713,88 @@ class _HomeScreenState extends State<HomeScreen> {
       milliseconds: (60000 / AppConstants.bpm / 2).round(),
     );
 
-    return Stack(
-      alignment: Alignment.centerLeft,
-      children: [
-        AnimatedScale(
-          scale: _controller.isPlaying ? (_titlePulseOn ? 1.12 : 1.0) : 1.0,
-          duration: pulseDuration,
-          curve: Curves.easeInOut,
-          child: AnimatedOpacity(
-            opacity: _controller.isPlaying ? (_titlePulseOn ? 1.0 : 0.82) : 1.0,
-            duration: pulseDuration,
-            child: ShaderMask(
-              shaderCallback: (bounds) => const LinearGradient(
-                colors: [Colors.red, Colors.purple, Colors.blue],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ).createShader(bounds),
-              child: const Text(
-                'NotRed',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
+    return SizedBox(
+      width: 200,
+      height: 40,
+      child: Stack(
+        alignment: Alignment.centerLeft,
+        children: [
+          // Новое анимируемое свечение за надписью
+          IgnorePointer(
+            child: AnimatedScale(
+              scale: _controller.isPlaying ? (_titlePulseOn ? 1.22 : 1.0) : 1.0,
+              duration: pulseDuration,
+              curve: Curves.easeInOut,
+              child: AnimatedOpacity(
+                opacity:
+                    _controller.isPlaying ? (_titlePulseOn ? 1.0 : 0.72) : 0.82,
+                duration: pulseDuration,
+                child: Container(
+                  width: 200,
+                  height: 30,
+                  decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withValues(
+                          alpha: _controller.isPlaying
+                              ? (_titlePulseOn ? 0.28 : 0.16)
+                              : 0.16,
+                        ),
+                        blurRadius: _controller.isPlaying
+                            ? (_titlePulseOn ? 24 : 16)
+                            : 16,
+                        spreadRadius:
+                            _controller.isPlaying ? (_titlePulseOn ? 3 : 1) : 1,
+                      ),
+                      BoxShadow(
+                        color: Colors.purple.withValues(
+                          alpha: _controller.isPlaying
+                              ? (_titlePulseOn ? 0.24 : 0.14)
+                              : 0.14,
+                        ),
+                        blurRadius: _controller.isPlaying
+                            ? (_titlePulseOn ? 30 : 20)
+                            : 20,
+                        spreadRadius:
+                            _controller.isPlaying ? (_titlePulseOn ? 4 : 1) : 1,
+                      ),
+                      BoxShadow(
+                        color: Colors.blue.withValues(
+                          alpha: _controller.isPlaying
+                              ? (_titlePulseOn ? 0.20 : 0.12)
+                              : 0.12,
+                        ),
+                        blurRadius: _controller.isPlaying
+                            ? (_titlePulseOn ? 36 : 24)
+                            : 24,
+                        spreadRadius:
+                            _controller.isPlaying ? (_titlePulseOn ? 5 : 2) : 2,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      ],
+
+          // Сама надпись больше не масштабируется
+          ShaderMask(
+            shaderCallback: (bounds) => const LinearGradient(
+              colors: [Colors.red, Colors.purple, Colors.blue],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ).createShader(bounds),
+            child: const Text(
+              'NotRedSound',
+              style: TextStyle(
+                fontSize: 28,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -826,71 +893,68 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                       Container(
-  decoration: BoxDecoration(
-    borderRadius: BorderRadius.circular(22),
-    gradient: LinearGradient(
-      colors: [
-        Colors.red.withValues(alpha: 0.18),
-        Colors.purple.withValues(alpha: 0.18),
-        Colors.blue.withValues(alpha: 0.18),
-      ],
-      begin: Alignment.topLeft,
-      end: Alignment.bottomRight,
-    ),
-    
-    boxShadow: [
-      BoxShadow(
-        color: Colors.red.withValues(alpha: 0.10),
-        blurRadius: 10,
-        spreadRadius: 1,
-      ),
-      BoxShadow(
-        color: Colors.purple.withValues(alpha: 0.10),
-        blurRadius: 14,
-        spreadRadius: 1,
-      ),
-      BoxShadow(
-        color: Colors.blue.withValues(alpha: 0.10),
-        blurRadius: 18,
-        spreadRadius: 2,
-      ),
-    ],
-  ),
-  child: Material(
-    color: Colors.transparent,
-    borderRadius: BorderRadius.circular(18),
-    child: InkWell(
-      borderRadius: BorderRadius.circular(18),
-
-      onTap: _showProjectPopup,
-      child: Container(
-        width: 52,
-        height: 52,
-        
-        alignment: Alignment.center,
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            Container(
-              width: 38,
-              height: 38,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.deepPurple.withValues(alpha: 0.82),
-                
-              ),
-            ),
-            const Icon(
-              Icons.menu,
-              color: Colors.white,
-              size: 24,
-            ),
-          ],
-        ),
-      ),
-    ),
-  ),
-),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(22),
+                          gradient: LinearGradient(
+                            colors: [
+                              Colors.red.withValues(alpha: 0.18),
+                              Colors.purple.withValues(alpha: 0.18),
+                              Colors.blue.withValues(alpha: 0.18),
+                            ],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.red.withValues(alpha: 0.10),
+                              blurRadius: 10,
+                              spreadRadius: 1,
+                            ),
+                            BoxShadow(
+                              color: Colors.purple.withValues(alpha: 0.10),
+                              blurRadius: 14,
+                              spreadRadius: 1,
+                            ),
+                            BoxShadow(
+                              color: Colors.blue.withValues(alpha: 0.10),
+                              blurRadius: 18,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          borderRadius: BorderRadius.circular(18),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(18),
+                            onTap: _showProjectPopup,
+                            child: Container(
+                              width: 52,
+                              height: 52,
+                              alignment: Alignment.center,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  Container(
+                                    width: 38,
+                                    height: 38,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.deepPurple
+                                          .withValues(alpha: 0.82),
+                                    ),
+                                  ),
+                                  const Icon(
+                                    Icons.menu,
+                                    color: Colors.white,
+                                    size: 24,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1097,8 +1161,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           if (hasTracks)
             Positioned(
-              left: 0,
-              right: 0,
+              left: 10,
+              right:10,
               bottom: 20,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -1108,74 +1172,99 @@ class _HomeScreenState extends State<HomeScreen> {
                   padding: const EdgeInsets.symmetric(
                     horizontal: 18,
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.deepPurple,
-                        ),
-                        child: IconButton(
-                          onPressed: _canUndo ? _undoLastAction : null,
-                          padding: EdgeInsets.zero,
-                          splashRadius: 26,
-                          icon: Icon(
-                            Icons.undo,
-                            size: 22,
-                            color: Colors.white.withValues(
-                              alpha: _canUndo ? 1.0 : 0.4,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 60),
-                      Container(
-                        width: 50,
-                        height: 50,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.deepPurple,
-                        ),
-                        child: IconButton(
-                          onPressed: () {
-                            if (_controller.tracks.isEmpty) {
-                              _showSnackBar(
-                                'Добавьте дорожку',
-                                Colors.orange,
-                              );
-                              return;
-                            }
-
-                            final hasNotes = _controller.tracks
-                                .any((t) => t.notes.isNotEmpty);
-
-                            if (!hasNotes) {
-                              _showSnackBar(
-                                'Добавьте ноты',
-                                Colors.orange,
-                              );
-                              return;
-                            }
-
-                            _controller.togglePlayback();
-                            setState(() {});
-                          },
-                          padding: EdgeInsets.zero,
-                          splashRadius: 30,
-                          icon: Icon(
-                            _controller.isPlaying
-                                ? Icons.stop
-                                : Icons.play_arrow,
-                            size: 22,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
+                  decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                          blurRadius: 50,
+                          color: const Color.fromARGB(71, 104, 58, 183)),
                     ],
                   ),
+                  child: Row(
+  mainAxisAlignment: MainAxisAlignment.center,
+  children: [
+    Container(
+      width: 50,
+      height: 50,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.deepPurple,
+      ),
+      child: IconButton(
+        onPressed: _canUndo ? _undoLastAction : null,
+        padding: EdgeInsets.zero,
+        splashRadius: 26,
+        icon: Icon(
+          Icons.undo,
+          size: 22,
+          color: Colors.white.withValues(
+            alpha: _canUndo ? 1.0 : 0.4,
+          ),
+        ),
+      ),
+    ),
+    const SizedBox(width: 45),
+    Container(
+      width: 55,
+      height: 55,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.deepPurple,
+      ),
+      child: IconButton(
+        onPressed: () {
+          if (_controller.tracks.isEmpty) {
+            _showSnackBar(
+              'Добавьте дорожку',
+              Colors.orange,
+            );
+            return;
+          }
+
+          final hasNotes = _controller.tracks.any((t) => t.notes.isNotEmpty);
+
+          if (!hasNotes) {
+            _showSnackBar(
+              'Добавьте ноты',
+              Colors.orange,
+            );
+            return;
+          }
+
+          _controller.togglePlayback();
+          setState(() {});
+        },
+        padding: EdgeInsets.zero,
+        splashRadius: 30,
+        icon: Icon(
+          _controller.isPlaying ? Icons.stop : Icons.play_arrow,
+          size: 25,
+          color: Colors.white,
+        ),
+      ),
+    ),
+    const SizedBox(width: 45),
+    Container(
+      width: 50,
+      height: 50,
+      decoration: const BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.deepPurple,
+      ),
+      child: IconButton(
+        onPressed: _canRedo ? _redoLastAction : null,
+        padding: EdgeInsets.zero,
+        splashRadius: 26,
+        icon: Icon(
+          Icons.redo,
+          size: 22,
+          color: Colors.white.withValues(
+            alpha: _canRedo ? 1.0 : 0.4,
+          ),
+        ),
+      ),
+    ),
+  ],
+),
                 ),
               ),
             ),

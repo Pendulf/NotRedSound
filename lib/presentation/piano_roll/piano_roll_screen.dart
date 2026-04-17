@@ -1041,7 +1041,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                 ),
               ),
               Text(
-                ' NR',
+                'NRS',
                 style: TextStyle(
                   fontSize: 30,
                   fontWeight: FontWeight.bold,
@@ -1059,7 +1059,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                   end: Alignment.bottomRight,
                 ).createShader(bounds),
                 child: const Text(
-                  ' NR',
+                  'NRS',
                   style: TextStyle(
                     fontSize: 30,
                     fontWeight: FontWeight.bold,
@@ -1104,10 +1104,21 @@ class _PianoRollScreenState extends State<PianoRollScreen>
     final notesEnabled = _hasNotes && !_isRecordingVoice;
 
     return SizedBox(
-      height: 72,
+      height: 60,
+      
       child: Stack(
+        
         alignment: Alignment.center,
+        
         children: [
+          Container(decoration: BoxDecoration(
+                    boxShadow: [
+                      BoxShadow(
+                          blurRadius: 50,
+                          color: currentTrack.color.withAlpha(50),
+                      ),
+                    ],),
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [

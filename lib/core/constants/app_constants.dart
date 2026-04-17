@@ -2,7 +2,10 @@ import 'package:flutter/material.dart';
 
 class AppConstants {
   static int beatsPerBar = 4;
-  static int ticksPerBeat = 4;
+  static int ticksPerBeat = 3;
+
+  static int get rythm3 => ticksPerBeat = 3;
+  static int get rythm4 => ticksPerBeat = 4;
 
   static int bpm = 60;
   static int totalBars = 20;
