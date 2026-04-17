@@ -49,19 +49,176 @@ class AudioService {
   static const int _drumsChannel = 9;
 
   final List<int> _availableMelodicChannels = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15,
-  ];
+    0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15];
 
-  static const Map<String, int> instruments = {
-    'Пианино': 0,
-    'Электро пианино': 4,
-    'Орган': 16,
-    'Гитара': 24,
-    'Бас': 32,
-    'Арфа': 46,
-    'Синт': 80,
-    'Барабаны': 128,
-  };
+ static const Map<String, int> instruments = {
+  // ===== КЛАВИШИ =====
+  'Пианино': 0,
+  'Яркое пианино': 1,
+  'Электропианино': 4,
+
+  // ===== КОЛОКОЛЬЧИКИ =====
+  'Челеста': 8,
+  'Музыкальная шкатулка': 10,
+  'Маримба': 12,
+  'Ситар': 15,
+  'Кристалл': 98,
+
+  // ===== ОРГАНЫ =====
+  'Орган': 16,
+  'Перкуссионный орган': 17,
+  'Рок-орган': 18,
+  'Церковный орган': 19,
+  'Губная гармошка': 22,
+
+  // ===== ГИТАРЫ =====
+  'Нейлоновая гитара': 24,
+  'Стальная гитара': 25,
+  'Джаз-гитара': 26,
+  'Чистая гитара': 27,
+  'Приглушённая гитара': 28,
+  'Овердрайв гитара': 29,
+  'Дисторшн гитара': 30,
+
+  // ===== БАСЫ =====
+  'Акустический бас': 32,
+  'Звонкий бас': 34,
+  'Синт-бас': 38,
+
+  // ===== СТРУННЫЕ =====
+  'Скрипка': 40,
+  'Виолончель': 42,
+  'Приглушённые струны': 45,
+  'Струнный ансамбль': 48,
+  'Терменвокс': 110,
+
+  // ===== ХОР =====
+  'Хор "Аа"': 52,
+  'Хор "Оо"': 53,
+
+  // ===== ДУХОВЫЕ =====
+  'Тромбон': 57,
+  'Сопрано саксофон': 64,
+  'Кларнет': 71,
+  'Флейта': 73,
+  'Пан-флейта': 75,
+  'Свист': 78,
+
+  // ===== СИНТЕЗАТОРЫ =====
+  'Волна Квадрат': 80,
+  'Волна Пила': 86,
+  'Полисинт': 90,
+  'Моносинт': 114,
+
+  // ===== АТМОСФЕРА =====
+  'Фантазия': 88,
+  'Стеклянный смычок': 92,
+  'Метал': 93,
+
+  // ===== ПЕРКУССИЯ =====
+  'Бочка': 116,
+  'Том': 117,
+  'Бочка 2': 118,
+  'Ударные': 128,
+
+  // ===== ЗВУКИ =====
+  'Шум ладов гитары': 120,
+  'Пение птиц': 123,
+  'Телефон': 124,
+  'Вертолёт': 125,
+  'Аплодисменты': 126,
+};
+
+static const Map<String, List<String>> instrumentCategories = {
+
+  '🎹 Клавиши': [
+    'Пианино',
+    'Яркое пианино',
+    'Электропианино',
+  ],
+
+  '🔔 Колокольчики': [
+    'Челеста',
+    'Музыкальная шкатулка',
+    'Маримба',
+    'Ситар',
+    'Кристалл',
+  ],
+
+  '🏰 Органы': [
+    'Орган',
+    'Перкуссионный орган',
+    'Рок-орган',
+    'Церковный орган',
+    'Губная гармошка',
+  ],
+
+  '🎸 Гитары': [
+    'Нейлоновая гитара',
+    'Стальная гитара',
+    'Джаз-гитара',
+    'Чистая гитара',
+    'Приглушённая гитара',
+    'Овердрайв гитара',
+    'Дисторшн гитара',
+  ],
+
+  '🎸 Басы': [
+    'Акустический бас',
+    'Звонкий бас',
+    'Синт-бас',
+  ],
+
+  '🎻 Струнные': [
+    'Скрипка',
+    'Виолончель',
+    'Приглушённые струны',
+    'Струнный ансамбль',
+    'Терменвокс',
+  ],
+
+  '🗣️ Хор': [
+    'Хор "Аа"',
+    'Хор "Оо"',
+  ],
+
+  '🎷 Духовые': [
+    'Тромбон',
+    'Сопрано саксофон',
+    'Кларнет',
+    'Флейта',
+    'Пан-флейта',
+    'Свист',
+  ],
+
+  '🎹 Синтезаторы': [
+    'Квадратная волна',
+    'Пила (5-я гармоника)',
+    'Полисинт',
+    'Моносинт',
+  ],
+
+  '🌌 Атмосфера': [
+    'Фантазия',
+    'Стеклянный смычок',
+    'Метал',
+  ],
+
+  '🥁 Перкусия': [
+    'Бочка',
+    'Бочка 2',
+    'Том',
+    'Ударные',
+  ],
+
+  '🔊 FX звуки': [
+    'Шум ладов гитары',
+    'Пение птиц',
+    'Телефон',
+    'Вертолёт',
+    'Аплодисменты',
+  ],
+};
 
   bool get isPlaying => _isPlaying;
   int get currentTick => _currentTick;
@@ -84,10 +241,10 @@ class AudioService {
     return _isDrumProgram(program) ? _drumsChannel : _allocateMelodicChannel();
   }
 
-  int _velocityFromTrack(Track track, {required bool isDrums}) {
-    const baseVelocity = 100;
-    return (isDrums ? 115 : baseVelocity).clamp(1, 127);
-  }
+int _velocityFromTrack(Track track, {required bool isDrums}) {
+  final baseVelocity = isDrums ? 115 : 60;
+  return (baseVelocity * track.volume).round().clamp(1, 127);
+}
 
   Future<void> initialize() async {
     try {
@@ -95,11 +252,11 @@ class AudioService {
       await _midiEngine?.unmute();
 
       final tempDir = await getTemporaryDirectory();
-      final sf2Path = '${tempDir.path}/FluidR3_GM.sf2';
+      final sf2Path = '${tempDir.path}/Arachno_SoundFont_Version_1.0.sf2';
 
       final sf2File = File(sf2Path);
       if (!await sf2File.exists()) {
-        final byteData = await rootBundle.load('assets/sounds/FluidR3_GM.sf2');
+        final byteData = await rootBundle.load('assets/sounds/Arachno_SoundFont_Version_1.0.sf2');
         final buffer = byteData.buffer;
         await sf2File.writeAsBytes(
           buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
@@ -168,31 +325,33 @@ class AudioService {
     return channel;
   }
 
-  Future<void> playNoteForTrack(String trackId, int pitch) async {
-    if (!_isInitialized) return;
+  Future<void> playNoteForTrack(String trackId, int pitch, {double volume = 1.0}) async {
+  if (!_isInitialized) return;
 
-    final program = _trackInstruments[trackId] ?? 0;
-    final isDrums = _isDrumProgram(program);
-    final channel = _channelForTrack(trackId);
+  final program = _trackInstruments[trackId] ?? 0;
+  final isDrums = _isDrumProgram(program);
+  final channel = _channelForTrack(trackId);
 
-    try {
-      if (!isDrums) {
-        await _midiEngine?.changeProgram(
-          program: _resolvePlaybackProgram(program),
-          channel: channel,
-        );
-      }
+  final velocity = ((isDrums ? 110 : 90) * volume).round().clamp(1, 127);
 
-      await _midiEngine?.stopNote(note: pitch, channel: channel);
-      await _midiEngine?.playNote(
-        note: pitch,
-        velocity: isDrums ? 110 : 90,
+  try {
+    if (!isDrums) {
+      await _midiEngine?.changeProgram(
+        program: _resolvePlaybackProgram(program),
         channel: channel,
       );
-    } catch (e) {
-      debugPrint('Preview play error: $e');
     }
+
+    await _midiEngine?.stopNote(note: pitch, channel: channel);
+    await _midiEngine?.playNote(
+      note: pitch,
+      velocity: velocity,
+      channel: channel,
+    );
+  } catch (e) {
+    debugPrint('Preview play error: $e');
   }
+}
 
   Future<void> stopNoteForTrack(String trackId, int pitch) async {
     if (!_isInitialized) return;

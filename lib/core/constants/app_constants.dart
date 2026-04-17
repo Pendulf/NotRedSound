@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 class AppConstants {
-  static const int beatsPerBar = 4;
-  static const int ticksPerBeat = 4;
+  static int beatsPerBar = 4;
+  static int ticksPerBeat = 4;
 
   static int bpm = 60;
   static int totalBars = 20;
@@ -15,7 +15,6 @@ class AppConstants {
   static const double previewHeight = 40;
   static const double horizontalPadding = 16;
 
-  // Было C3 = 48, стало C2 = 36
   static const int minNote = 36;
   static const int maxNote = 84;
 
@@ -38,25 +37,22 @@ class AppConstants {
     totalBars = newTotalBars.clamp(1, 100);
   }
 
+  static void updateTimeSignature({
+    required int newBeatsPerBar,
+    int? newTicksPerBeat,
+  }) {
+    beatsPerBar = newBeatsPerBar.clamp(1, 12);
+    if (newTicksPerBeat != null) {
+      ticksPerBeat = newTicksPerBeat.clamp(1, 16);
+    }
+  }
+
   static double get secondsPerBeat => 60.0 / bpm;
   static double get secondsPerBar => secondsPerBeat * beatsPerBar;
   static double get secondsPerTick => secondsPerBeat / ticksPerBeat;
   static int get millisecondsPerTick => (secondsPerTick * 1000).round();
 
-  static String durationLabel(int ticks) {
-    switch (ticks) {
-      case 1:
-        return '1/16';
-      case 2:
-        return '1/8';
-      case 4:
-        return '1/4';
-      case 8:
-        return '1/2';
-      case 16:
-        return '1';
-      default:
-        return '$ticks т.';
-    }
-  }
+  static String get timeSignatureLabel => '$beatsPerBar/4';
+
+
 }

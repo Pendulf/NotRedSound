@@ -29,6 +29,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _titlePulseTimer;
   bool _titlePulseOn = false;
 
+  final List<List<Track>> _history = [];
+
   @override
   void initState() {
     super.initState();
@@ -72,6 +74,53 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
+  List<MidiNote> _cloneNotes(List<MidiNote> notes) {
+    return notes
+        .map(
+          (n) => MidiNote(
+            pitch: n.pitch,
+            startTick: n.startTick,
+            durationTicks: n.durationTicks,
+          ),
+        )
+        .toList();
+  }
+
+  Track _cloneTrack(Track track) {
+    return track.copyWith(
+      notes: _cloneNotes(track.notes),
+    );
+  }
+
+  List<Track> _cloneTracks(List<Track> tracks) {
+    return tracks.map(_cloneTrack).toList();
+  }
+
+  void _pushHistory() {
+    _history.add(_cloneTracks(_controller.tracks));
+    if (_history.length > 100) {
+      _history.removeAt(0);
+    }
+  }
+
+  bool get _canUndo => _history.isNotEmpty && !_controller.isPlaying;
+
+  void _restoreTracksFromSnapshot(List<Track> snapshot) {
+    final repoTracks = _repository.getTracks().cast<Track>();
+    repoTracks
+      ..clear()
+      ..addAll(_cloneTracks(snapshot));
+
+    _clearSelectedSegment();
+    setState(() {});
+  }
+
+  void _undoLastAction() {
+    if (!_canUndo) return;
+    final snapshot = _history.removeLast();
+    _restoreTracksFromSnapshot(snapshot);
+  }
+
   void _startTitlePulse() {
     if (_titlePulseTimer != null) return;
 
@@ -101,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
     AppConstants.barWidth = (screenWidth - 100) / 4;
   }
 
-  void _openPianoRoll(Track track) {
+  void _openPianoRoll(Track track, {int initialBar = 0}) {
     _controller.markAsOpened(track.id);
 
     Navigator.push(
@@ -113,6 +162,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _controller.updateTrack(updatedTrack);
           },
           bpm: AppConstants.bpm,
+          initialStartTick: initialBar * AppConstants.ticksPerBar,
         ),
       ),
     ).then((_) {
@@ -126,7 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final segment = _controller.createSegmentFromBars(track.id, barIndex, 1);
 
     if (segment == null) {
-      _showSnackBar('⚠️ В этом такте нет нот', Colors.orange);
+      _showSnackBar('В этом такте нет нот', Colors.orange);
       return;
     }
 
@@ -138,20 +188,12 @@ class _HomeScreenState extends State<HomeScreen> {
       _controller.setTrackSegment(track.id, segment);
     });
 
-    _showSnackBar(
-      '✅ Такт скопирован. Нажми на пустой такт для вставки или на заполненный для удаления',
-      Colors.green,
-      duration: const Duration(seconds: 2),
-    );
-
     _segmentClearTimer = Timer(const Duration(seconds: 5), () {
       if (!mounted) return;
 
       setState(() {
         _clearSelectedSegment();
       });
-
-      _showSnackBar('⌛ Выделение сегмента снято', Colors.grey);
     });
   }
 
@@ -162,12 +204,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final notesInBar = _getNotesInBar(track, barIndex);
       final barHasNotes = notesInBar.isNotEmpty;
 
+      _pushHistory();
+
       if (barHasNotes) {
         _controller.deleteNotesInBar(track.id, barIndex);
-        _showSnackBar('🗑️ Ноты в такте удалены', Colors.orange);
       } else {
         _controller.copySegmentToBar(track.id, _selectedSegment!, barIndex);
-        _showSnackBar('📋 Сегмент вставлен', Colors.green);
       }
 
       setState(() {
@@ -176,7 +218,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    _openPianoRoll(track);
+    _openPianoRoll(track, initialBar: barIndex);
   }
 
   void _clearSelectedSegment() {
@@ -192,17 +234,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return ((value / 5).round() * 5).clamp(40, 240);
   }
 
-  void _showBpmSettings() {
+  void _showProjectPopup() {
     showDialog(
       context: context,
       builder: (context) {
         int tempBpm = AppConstants.bpm;
         int tempBars = AppConstants.totalBars;
+        int tempBeatsPerBar = AppConstants.beatsPerBar;
 
         DateTime? lastTapTime;
         final List<int> tapIntervalsMs = [];
 
-        void handleTapTempo(void Function(void Function()) setState) {
+        void handleTapTempo(void Function(void Function()) setLocalState) {
           final now = DateTime.now();
 
           if (lastTapTime == null) {
@@ -227,118 +270,170 @@ class _HomeScreenState extends State<HomeScreen> {
           final averageMs =
               tapIntervalsMs.reduce((a, b) => a + b) / tapIntervalsMs.length;
 
-          final calculatedBpm = _roundToNearestFive((60000 / averageMs).round());
+          final calculatedBpm =
+              _roundToNearestFive((60000 / averageMs).round());
 
-          setState(() {
+          setLocalState(() {
             tempBpm = calculatedBpm;
           });
         }
 
         return StatefulBuilder(
-          builder: (context, setState) {
+          builder: (context, setLocalState) {
             return AlertDialog(
               backgroundColor: Colors.grey[850],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Colors.deepPurple, width: 1.2),
+              ),
               title: const Text(
-                'Настройки проекта',
+                'Проект',
                 style: TextStyle(color: Colors.white),
               ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Text(
-                    'Темп (BPM)',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove, color: Colors.amber),
-                        onPressed: () {
-                          setState(() {
-                            tempBpm = (tempBpm - 5).clamp(40, 240);
-                          });
-                        },
-                      ),
-                      Expanded(
-                        child: Center(
-                          child: GestureDetector(
-                            onTap: () => handleTapTempo(setState),
-                            child: Container(
-                              color: Colors.transparent,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                                vertical: 8,
-                              ),
-                              child: Text(
-                                '$tempBpm',
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 24,
-                                  fontWeight: FontWeight.bold,
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'Темп (BPM)',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove, color: Colors.amber),
+                          onPressed: () {
+                            setLocalState(() {
+                              tempBpm = (tempBpm - 5).clamp(40, 240);
+                            });
+                          },
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: GestureDetector(
+                              onTap: () => handleTapTempo(setLocalState),
+                              child: Container(
+                                color: Colors.transparent,
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 8,
                                 ),
-                                textAlign: TextAlign.center,
+                                child: Text(
+                                  '$tempBpm',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.add, color: Colors.amber),
-                        onPressed: () {
-                          setState(() {
-                            tempBpm = (tempBpm + 5).clamp(40, 240);
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Тапай по цифрам в своём ритме',
-                    style: TextStyle(
-                      color: Colors.white38,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Text(
-                    'Количество тактов',
-                    style: TextStyle(color: Colors.white70),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      IconButton(
-                        icon: const Icon(Icons.remove, color: Colors.amber),
-                        onPressed: () {
-                          setState(() {
-                            tempBars = (tempBars - 1).clamp(1, 100);
-                          });
-                        },
-                      ),
-                      Expanded(
-                        child: Text(
-                          '$tempBars',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 24,
-                            fontWeight: FontWeight.bold,
-                          ),
-                          textAlign: TextAlign.center,
+                        IconButton(
+                          icon: const Icon(Icons.add, color: Colors.amber),
+                          onPressed: () {
+                            setLocalState(() {
+                              tempBpm = (tempBpm + 5).clamp(40, 240);
+                            });
+                          },
                         ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Количество тактов',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        IconButton(
+                          icon: const Icon(Icons.remove, color: Colors.amber),
+                          onPressed: () {
+                            setLocalState(() {
+                              tempBars = (tempBars - 1).clamp(1, 100);
+                            });
+                          },
+                        ),
+                        Expanded(
+                          child: Text(
+                            '$tempBars',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.add, color: Colors.amber),
+                          onPressed: () {
+                            setLocalState(() {
+                              tempBars = (tempBars + 1).clamp(1, 100);
+                            });
+                          },
+                        ),
+                      ],
+                    ),
+                    const Divider(color: Colors.white24),
+                    const SizedBox(height: 10),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.save, color: Colors.green),
+                      title: const Text(
+                        'Сохранить проект',
+                        style: TextStyle(color: Colors.white),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.add, color: Colors.amber),
-                        onPressed: () {
-                          setState(() {
-                            tempBars = (tempBars + 1).clamp(1, 100);
-                          });
-                        },
+                      onTap: () {
+                        AppConstants.updateBpm(tempBpm);
+                        AppConstants.updateTotalBars(tempBars);
+                        AppConstants.updateTimeSignature(
+                          newBeatsPerBar: tempBeatsPerBar,
+                        );
+                        _calculateBarWidth();
+                        Navigator.pop(context);
+                        setState(() {});
+                        _saveProject();
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.share, color: Colors.blue),
+                      title: const Text(
+                        'Отправить проект',
+                        style: TextStyle(color: Colors.white),
                       ),
-                    ],
-                  ),
-                ],
+                      onTap: () {
+                        AppConstants.updateBpm(tempBpm);
+                        AppConstants.updateTotalBars(tempBars);
+                        AppConstants.updateTimeSignature(
+                          newBeatsPerBar: tempBeatsPerBar,
+                        );
+                        _calculateBarWidth();
+                        Navigator.pop(context);
+                        setState(() {});
+                        _exportToMidi(share: true);
+                      },
+                    ),
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading:
+                          const Icon(Icons.delete_forever, color: Colors.red),
+                      title: const Text(
+                        'Удалить проект',
+                        style: TextStyle(color: Colors.red),
+                      ),
+                      onTap: () {
+                        Navigator.pop(context);
+                        _confirmDeleteProject();
+                      },
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -349,7 +444,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   onPressed: () {
                     AppConstants.updateBpm(tempBpm);
                     AppConstants.updateTotalBars(tempBars);
+                    AppConstants.updateTimeSignature(
+                      newBeatsPerBar: tempBeatsPerBar,
+                    );
                     Navigator.pop(context);
+                    _calculateBarWidth();
                     setState(() {});
                   },
                   style: ElevatedButton.styleFrom(
@@ -363,6 +462,53 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  void _confirmDeleteProject() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: const BorderSide(color: Colors.red, width: 1.2),
+        ),
+        title: const Text(
+          'Удалить текущий проект',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const Text(
+          'Все дорожки текущего проекта будут удалены. Продолжить?',
+          style: TextStyle(color: Colors.white70),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _deleteCurrentProject();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteCurrentProject() {
+    _pushHistory();
+
+    final repoTracks = _repository.getTracks().cast<Track>();
+    repoTracks.clear();
+
+    _clearSelectedSegment();
+
+    setState(() {});
+    _showSnackBar('Текущий проект удалён', Colors.red);
   }
 
   Future<void> _saveProject() async {
@@ -407,9 +553,9 @@ class _HomeScreenState extends State<HomeScreen> {
       } else {
         _showSnackBar(
           share
-              ? 'ZIP архив с MIDI файлами отправлен'
-              : 'Папка с MIDI файлами сохранена',
-          Colors.green,
+              ? 'ZIP архив с MIDI файлами не отправлен'
+              : 'Папка с MIDI файлами не сохранена',
+          Colors.orange,
         );
       }
     } catch (e) {
@@ -434,6 +580,7 @@ class _HomeScreenState extends State<HomeScreen> {
       context,
       track,
       (instrument) {
+        _pushHistory();
         _controller.updateTrackInstrument(track.id, instrument);
         setState(() {});
       },
@@ -443,7 +590,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void _showSnackBar(
     String message,
     Color color, {
-    Duration duration = const Duration(seconds: 2),
+    Duration duration = const Duration(seconds: 1),
   }) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -455,38 +602,19 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _scrollLeft() {
-    if (_controller.horizontalScrollController.hasClients) {
-      final newOffset = (_controller.horizontalScrollController.offset -
-              AppConstants.barWidth)
-          .clamp(
-        0.0,
-        _controller.horizontalScrollController.position.maxScrollExtent,
-      );
+  void _handleTrackPreviewHorizontalDrag(DragUpdateDetails details) {
+    if (!_controller.horizontalScrollController.hasClients) return;
 
-      _controller.horizontalScrollController.animateTo(
-        newOffset,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
-    }
-  }
+    final delta = details.primaryDelta ?? 0.0;
+    final position = _controller.horizontalScrollController.position;
 
-  void _scrollRight() {
-    if (_controller.horizontalScrollController.hasClients) {
-      final newOffset = (_controller.horizontalScrollController.offset +
-              AppConstants.barWidth)
-          .clamp(
-        0.0,
-        _controller.horizontalScrollController.position.maxScrollExtent,
-      );
+    final newOffset =
+        (_controller.horizontalScrollController.offset - delta).clamp(
+      position.minScrollExtent,
+      position.maxScrollExtent,
+    );
 
-      _controller.horizontalScrollController.animateTo(
-        newOffset,
-        duration: const Duration(milliseconds: 180),
-        curve: Curves.easeOut,
-      );
-    }
+    _controller.horizontalScrollController.jumpTo(newOffset);
   }
 
   List<MidiNote> _getNotesInBar(Track track, int barIndex) {
@@ -549,8 +677,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     final tickWidth = AppConstants.barWidth / AppConstants.ticksPerBar;
-    final playheadX =
-        (_controller.currentTick * tickWidth) -
+    final playheadX = (_controller.currentTick * tickWidth) -
         (_controller.horizontalScrollController.hasClients
             ? _controller.horizontalScrollController.offset
             : 0);
@@ -576,32 +703,6 @@ class _HomeScreenState extends State<HomeScreen> {
     return Stack(
       alignment: Alignment.centerLeft,
       children: [
-        IgnorePointer(
-          child: Container(
-            width: 118,
-            height: 34,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.red.withValues(alpha: 0.22),
-                  blurRadius: 18,
-                  spreadRadius: 2,
-                ),
-                BoxShadow(
-                  color: Colors.purple.withValues(alpha: 0.20),
-                  blurRadius: 24,
-                  spreadRadius: 3,
-                ),
-                BoxShadow(
-                  color: Colors.blue.withValues(alpha: 0.18),
-                  blurRadius: 30,
-                  spreadRadius: 4,
-                ),
-              ],
-            ),
-          ),
-        ),
         AnimatedScale(
           scale: _controller.isPlaying ? (_titlePulseOn ? 1.12 : 1.0) : 1.0,
           duration: pulseDuration,
@@ -630,17 +731,44 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildRoundButton({
+    required IconData icon,
+    required VoidCallback? onPressed,
+    required Color color,
+  }) {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: color,
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        padding: EdgeInsets.zero,
+        splashRadius: 24,
+        icon: Icon(
+          icon,
+          color: Colors.white.withValues(alpha: onPressed == null ? 0.4 : 1.0),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final hasTracks = _controller.tracks.isNotEmpty;
+    final selectedBar = _controller.isPlaying
+        ? -1
+        : _controller.playbackStartBar.clamp(0, AppConstants.maxBars - 1);
 
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Colors.transparent,
       body: Stack(
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/background.jpg',
+              'assets/electro_background.jpg',
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
                 return Container(color: Colors.grey[900]);
@@ -657,90 +785,113 @@ class _HomeScreenState extends State<HomeScreen> {
             child: Column(
               children: [
                 const SizedBox(height: 35),
-                GestureDetector(
-                  onTap: _showBpmSettings,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    decoration: BoxDecoration(
-                      color: const Color.fromARGB(255, 34, 34, 34)?.withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.deepPurple, width: 1),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.3),
-                          blurRadius: 4,
-                          offset: const Offset(0, 2),
-                        ),
+                Container(
+                  clipBehavior: Clip.hardEdge,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    gradient: LinearGradient(
+                      colors: [
+                        const Color.fromARGB(255, 123, 36, 29)
+                            .withValues(alpha: 0.60), // прозрачность градиента
+                        const Color.fromARGB(255, 109, 29, 123)
+                            .withValues(alpha: 0.60),
+                        const Color.fromARGB(255, 19, 112, 175)
+                            .withValues(alpha: 0.60),
                       ],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
                     ),
-                    child: Row(
-                      children: [
-                        _buildAnimatedTitle(),
-                        const Spacer(),
-                        Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          child: ElevatedButton(
-                            onPressed: () {
-                              if (_controller.tracks.isEmpty) {
-                                _showSnackBar(
-                                  'Нет дорожек для воспроизведения',
-                                  Colors.orange,
-                                );
-                                return;
-                              }
-
-                              final hasNotes =
-                                  _controller.tracks.any((t) => t.notes.isNotEmpty);
-                              if (!hasNotes) {
-                                _showSnackBar(
-                                  'Нет нот для воспроизведения',
-                                  Colors.orange,
-                                );
-                                return;
-                              }
-
-                              _controller.togglePlayback();
-                              setState(() {});
-                            },
-                            style: ElevatedButton.styleFrom(
-                              shape: const CircleBorder(),
-                              padding: const EdgeInsets.all(12),
-                              backgroundColor: Colors.deepPurple,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: Icon(
-                              _controller.isPlaying ? Icons.stop : Icons.play_arrow,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          margin: const EdgeInsets.only(right: 8),
-                          child: ElevatedButton(
-                            onPressed: _saveProject,
-                            style: ElevatedButton.styleFrom(
-                              shape: const CircleBorder(),
-                              padding: const EdgeInsets.all(12),
-                              backgroundColor: Colors.deepPurple,
-                              foregroundColor: Colors.white,
-                            ),
-                            child: const Icon(Icons.save),
-                          ),
-                        ),
-                        ElevatedButton(
-                          onPressed: () => _exportToMidi(share: true),
-                          style: ElevatedButton.styleFrom(
-                            shape: const CircleBorder(),
-                            padding: const EdgeInsets.all(12),
-                            backgroundColor: Colors.deepPurple,
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Icon(Icons.share),
-                        ),
-                      ],
+                    border: Border.all(
+                      color: Colors.deepPurple.withValues(alpha: 0.6),
+                      width: 1.2,
                     ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.25),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          child: _buildAnimatedTitle(),
+                        ),
+                      ),
+                      Container(
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(22),
+    gradient: LinearGradient(
+      colors: [
+        Colors.red.withValues(alpha: 0.18),
+        Colors.purple.withValues(alpha: 0.18),
+        Colors.blue.withValues(alpha: 0.18),
+      ],
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+    ),
+    
+    boxShadow: [
+      BoxShadow(
+        color: Colors.red.withValues(alpha: 0.10),
+        blurRadius: 10,
+        spreadRadius: 1,
+      ),
+      BoxShadow(
+        color: Colors.purple.withValues(alpha: 0.10),
+        blurRadius: 14,
+        spreadRadius: 1,
+      ),
+      BoxShadow(
+        color: Colors.blue.withValues(alpha: 0.10),
+        blurRadius: 18,
+        spreadRadius: 2,
+      ),
+    ],
+  ),
+  child: Material(
+    color: Colors.transparent,
+    borderRadius: BorderRadius.circular(18),
+    child: InkWell(
+      borderRadius: BorderRadius.circular(18),
+
+      onTap: _showProjectPopup,
+      child: Container(
+        width: 52,
+        height: 52,
+        
+        alignment: Alignment.center,
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.deepPurple.withValues(alpha: 0.82),
+                
+              ),
+            ),
+            const Icon(
+              Icons.menu,
+              color: Colors.white,
+              size: 24,
+            ),
+          ],
+        ),
+      ),
+    ),
+  ),
+),
+                    ],
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -758,6 +909,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: Colors.transparent,
                           child: InkWell(
                             onTap: () {
+                              _pushHistory();
                               _controller.addTrack();
                               setState(() {});
                               WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -800,29 +952,42 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                               child: ListView.builder(
                                 scrollDirection: Axis.horizontal,
-                                controller: _controller.horizontalScrollController,
+                                controller:
+                                    _controller.horizontalScrollController,
                                 physics: const ClampingScrollPhysics(),
                                 itemCount: AppConstants.maxBars,
                                 itemBuilder: (context, index) {
-                                  return Container(
-                                    width: AppConstants.barWidth,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      border: index == AppConstants.maxBars - 1
-                                          ? null
-                                          : const Border(
-                                              right: BorderSide(
-                                                color: Colors.amber,
-                                                width: 2,
-                                              ),
-                                            ),
-                                    ),
-                                    child: Text(
-                                      '${index + 1}',
-                                      style: const TextStyle(
-                                        color: Colors.amber,
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.bold,
+                                  final isSelected = selectedBar == index;
+
+                                  return GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () =>
+                                        _controller.setPlaybackStartBar(index),
+                                    child: Container(
+                                      width: AppConstants.barWidth,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? Colors.amber
+                                                .withValues(alpha: 0.18)
+                                            : Colors.transparent,
+                                        border: Border(
+                                          right: BorderSide(
+                                            color: index ==
+                                                    AppConstants.maxBars - 1
+                                                ? Colors.transparent
+                                                : Colors.amber,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${index + 1}',
+                                        style: const TextStyle(
+                                          color: Colors.amber,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
                                       ),
                                     ),
                                   );
@@ -830,30 +995,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               ),
                             ),
                             _buildPlayheadHeaderOverlay(),
-                            Positioned(
-                              left: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: GestureDetector(
-                                onTap: _scrollLeft,
-                                child: Container(
-                                  width: 50,
-                                  color: Colors.transparent,
-                                ),
-                              ),
-                            ),
-                            Positioned(
-                              right: 0,
-                              top: 0,
-                              bottom: 0,
-                              child: GestureDetector(
-                                onTap: _scrollRight,
-                                child: Container(
-                                  width: 50,
-                                  color: Colors.transparent,
-                                ),
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -863,74 +1004,181 @@ class _HomeScreenState extends State<HomeScreen> {
                 const SizedBox(height: 12),
                 Expanded(
                   child: hasTracks
-                      ? Container(
-                          decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          clipBehavior: Clip.antiAlias,
-                          child: Scrollbar(
-                            controller: _controller.verticalScrollController,
-                            child: ListView.builder(
+                      ? GestureDetector(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Scrollbar(
                               controller: _controller.verticalScrollController,
-                              padding: EdgeInsets.zero,
-                              itemCount: _controller.tracks.length,
-                              itemBuilder: (context, index) {
-                                final track = _controller.tracks[index];
-                                final trackSegment =
-                                    _selectedTrackId == track.id ? _selectedSegment : null;
+                              child: ListView.builder(
+                                controller:
+                                    _controller.verticalScrollController,
+                                padding: EdgeInsets.zero,
+                                itemCount: _controller.tracks.length,
+                                itemBuilder: (context, index) {
+                                  final track = _controller.tracks[index];
+                                  final trackSegment =
+                                      _selectedTrackId == track.id
+                                          ? _selectedSegment
+                                          : null;
 
-                                return Padding(
-                                  padding: const EdgeInsets.only(bottom: 16),
-                                  child: TrackRowWidget(
-                                    track: track,
-                                    hasBeenOpened: _controller.openedTracks.contains(track.id),
-                                    onMutePressed: () {
-                                      _controller.toggleMute(track.id);
-                                      setState(() {});
-                                    },
-                                    onMuteLongPressed: () {
-                                      _controller.soloOrResetMute(track.id);
-                                      setState(() {});
-                                    },
-                                    onEditPressed: () => _openPianoRoll(track),
-                                    onDeletePressed: () {
-                                      _controller.deleteTrack(track.id);
-                                      setState(() {});
-                                    },
-                                    onRename: (newName) {
-                                      _controller.renameTrack(track.id, newName);
-                                      setState(() {});
-                                    },
-                                    onInstrumentChange: (instrument) {
-                                      _controller.updateTrackInstrument(track.id, instrument);
-                                      setState(() {});
-                                    },
-                                    onVolumeChanged: (value) {
-                                      _controller.updateTrackVolume(track.id, value);
-                                      setState(() {});
-                                    },
-                                    horizontalScrollController:
-                                        _controller.horizontalScrollController,
-                                    getNotesInBar: _getNotesInBar,
-                                    getNoteRange: _getNoteRange,
-                                    currentSegment: trackSegment,
-                                    onBarLongPress: (barIndex) =>
-                                        _onBarLongPress(track, barIndex),
-                                    onBarTap: (barIndex) => _onBarTap(track, barIndex),
-                                    playheadTick: _controller.currentTick,
-                                    isPlaying: _controller.isPlaying,
-                                  ),
-                                );
-                              },
+                                  return Padding(
+                                    padding: const EdgeInsets.only(bottom: 16),
+                                    child: TrackRowWidget(
+                                      track: track,
+                                      hasBeenOpened: _controller.openedTracks
+                                          .contains(track.id),
+                                      onMutePressed: () {
+                                        _pushHistory();
+                                        _controller.toggleMute(track.id);
+                                        setState(() {});
+                                      },
+                                      onMuteLongPressed: () {
+                                        _pushHistory();
+                                        _controller.soloOrResetMute(track.id);
+                                        setState(() {});
+                                      },
+                                      onEditPressed: () =>
+                                          _openPianoRoll(track),
+                                      onDeletePressed: () {
+                                        _pushHistory();
+                                        _controller.deleteTrack(track.id);
+                                        setState(() {});
+                                      },
+                                      onRename: (newName) {
+                                        _pushHistory();
+                                        _controller.renameTrack(
+                                            track.id, newName);
+                                        setState(() {});
+                                      },
+                                      onInstrumentChange: (instrument) {
+                                        _pushHistory();
+                                        _controller.updateTrackInstrument(
+                                          track.id,
+                                          instrument,
+                                        );
+                                        setState(() {});
+                                      },
+                                      onVolumeChanged: (value) {
+                                        _pushHistory();
+                                        _controller.updateTrackVolume(
+                                          track.id,
+                                          value,
+                                        );
+                                        setState(() {});
+                                      },
+                                      horizontalScrollController: _controller
+                                          .horizontalScrollController,
+                                      getNotesInBar: _getNotesInBar,
+                                      getNoteRange: _getNoteRange,
+                                      currentSegment: trackSegment,
+                                      onBarLongPress: (barIndex) =>
+                                          _onBarLongPress(track, barIndex),
+                                      onBarTap: (barIndex) =>
+                                          _onBarTap(track, barIndex),
+                                      playheadTick: _controller.currentTick,
+                                      isPlaying: _controller.isPlaying,
+                                      onHorizontalPreviewDrag:
+                                          _handleTrackPreviewHorizontalDrag,
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                           ),
                         )
                       : _buildEmptyState(),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 85),
               ],
             ),
           ),
+          if (hasTracks)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 20,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: AppConstants.horizontalPadding,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 18,
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.deepPurple,
+                        ),
+                        child: IconButton(
+                          onPressed: _canUndo ? _undoLastAction : null,
+                          padding: EdgeInsets.zero,
+                          splashRadius: 26,
+                          icon: Icon(
+                            Icons.undo,
+                            size: 22,
+                            color: Colors.white.withValues(
+                              alpha: _canUndo ? 1.0 : 0.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 60),
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: Colors.deepPurple,
+                        ),
+                        child: IconButton(
+                          onPressed: () {
+                            if (_controller.tracks.isEmpty) {
+                              _showSnackBar(
+                                'Добавьте дорожку',
+                                Colors.orange,
+                              );
+                              return;
+                            }
+
+                            final hasNotes = _controller.tracks
+                                .any((t) => t.notes.isNotEmpty);
+
+                            if (!hasNotes) {
+                              _showSnackBar(
+                                'Добавьте ноты',
+                                Colors.orange,
+                              );
+                              return;
+                            }
+
+                            _controller.togglePlayback();
+                            setState(() {});
+                          },
+                          padding: EdgeInsets.zero,
+                          splashRadius: 30,
+                          icon: Icon(
+                            _controller.isPlaying
+                                ? Icons.stop
+                                : Icons.play_arrow,
+                            size: 22,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
@@ -968,6 +1216,7 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 32),
           ElevatedButton.icon(
             onPressed: () {
+              _pushHistory();
               _controller.addTrack();
               setState(() {});
               WidgetsBinding.instance.addPostFrameCallback((_) {

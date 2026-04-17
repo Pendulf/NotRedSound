@@ -40,4 +40,5 @@ flutter:
     - assets/background.jpg
     - assets/electro_background.jpg
     - assets/rock_background.jpg
-    - assets/sounds/FluidR3_GM.sf2
+
+    - assets/sounds/Arachno_SoundFont_Version_1.0.sf2

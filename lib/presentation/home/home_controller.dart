@@ -30,6 +30,9 @@ class HomeController extends ChangeNotifier {
   bool get isPlaying => _audioService.isPlaying;
   int get currentTick => _audioService.currentTick;
 
+  int _playbackStartBar = 0;
+  int get playbackStartBar => _playbackStartBar;
+
   PatternSegment? getTrackSegment(String trackId) => _trackSegments[trackId];
 
   void setTrackSegment(String trackId, PatternSegment segment) {
@@ -55,6 +58,11 @@ class HomeController extends ChangeNotifier {
   }
 
   int get _ticksPerBar => AppConstants.ticksPerBar;
+
+  void setPlaybackStartBar(int barIndex) {
+    _playbackStartBar = barIndex.clamp(0, AppConstants.maxBars - 1);
+    notifyListeners();
+  }
 
   Track? _findTrack(String trackId) {
     try {
@@ -314,8 +322,11 @@ class HomeController extends ChangeNotifier {
       _audioService.setTrackInstrument(track.id, track.instrument);
     }
 
+    final startTick = _playbackStartBar * AppConstants.ticksPerBar;
+
     _audioService.startPlayback(
       tracksWithNotes,
+      startTick: startTick,
       onTick: notifyListeners,
       onFinished: notifyListeners,
     );

@@ -19,6 +19,7 @@ class TrackRowWidget extends StatelessWidget {
   final Function(double) onVolumeChanged;
 
   final ScrollController horizontalScrollController;
+  final GestureDragUpdateCallback? onHorizontalPreviewDrag;
 
   final List<MidiNote> Function(Track, int) getNotesInBar;
   final Map<String, int> Function(Track) getNoteRange;
@@ -49,6 +50,7 @@ class TrackRowWidget extends StatelessWidget {
     required this.onBarTap,
     required this.playheadTick,
     required this.isPlaying,
+    this.onHorizontalPreviewDrag,
   });
 
   void _showRenameDialog(BuildContext context) {
@@ -68,7 +70,7 @@ class TrackRowWidget extends StatelessWidget {
             style: const TextStyle(color: Colors.white),
             decoration: InputDecoration(
               hintText: 'Введите название',
-              hintStyle: TextStyle(color: Colors.grey),
+              hintStyle: const TextStyle(color: Colors.grey),
               enabledBorder: UnderlineInputBorder(
                 borderSide: BorderSide(color: Colors.grey.shade700),
               ),
@@ -132,6 +134,24 @@ class TrackRowWidget extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  bool _notesMatchSegment(List<MidiNote> barNotes, PatternSegment? segment) {
+    if (segment == null) return false;
+    if (barNotes.length != segment.notes.length) return false;
+
+    for (int i = 0; i < barNotes.length; i++) {
+      final a = barNotes[i];
+      final b = segment.notes[i];
+
+      if (a.pitch != b.pitch ||
+          a.startTick != b.startTick ||
+          a.durationTicks != b.durationTicks) {
+        return false;
+      }
+    }
+
+    return true;
   }
 
   @override
@@ -224,7 +244,7 @@ class TrackRowWidget extends StatelessWidget {
                           child: Align(
                             alignment: Alignment.center,
                             child: ControlButton(
-                              icon: Icons.list,
+                              icon: Icons.queue_music,
                               color: track.color,
                               onPressed: () => showInstrumentPickerDialog(
                                 context,
@@ -296,98 +316,106 @@ class TrackRowWidget extends StatelessWidget {
 
                     final visibleBars = <Widget>[];
                     for (int barIndex = firstVisibleBar;
-                        barIndex < lastVisibleBar;
-                        barIndex++) {
-                      final notesInBar = getNotesInBar(track, barIndex);
-                      final isEmpty = notesInBar.isEmpty;
-                      final isSegmentAvailable = hasSegment && isEmpty;
+    barIndex < lastVisibleBar;
+    barIndex++) {
+  final notesInBar = getNotesInBar(track, barIndex);
+  final isEmpty = notesInBar.isEmpty;
 
-                      visibleBars.add(
-                        Positioned(
-                          left: (barIndex * AppConstants.barWidth) - offset,
-                          top: 0,
-                          width: AppConstants.barWidth,
-                          height: AppConstants.previewHeight + 40,
-                          child: GestureDetector(
-                            onLongPress: () => onBarLongPress(barIndex),
-                            onTap: () => onBarTap(barIndex),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                border: Border(
-                                  right: BorderSide(
-                                    color: Colors.grey.shade800,
-                                    width: 1,
-                                  ),
-                                ),
-                              ),
-                              child: Stack(
-                                children: [
-                                  if (isSegmentAvailable)
-                                    Positioned.fill(
-                                      child: Container(
-                                        color: track.color.withValues(alpha: 0.15),
-                                      ),
-                                    ),
-                                  CustomPaint(
-                                    size: Size(
-                                      AppConstants.barWidth,
-                                      AppConstants.previewHeight + 40,
-                                    ),
-                                    painter: PatternPainter(
-                                      notes: notesInBar,
-                                      color: track.color,
-                                      barWidth: AppConstants.barWidth,
-                                      previewHeight: AppConstants.previewHeight,
-                                      minNote: noteRange['min']!,
-                                      maxNote: noteRange['max']!,
-                                      ticksPerBar: ticksPerBar,
-                                    ),
-                                  ),
-                                  if (isSegmentAvailable)
-                                    Positioned(
-                                      bottom: 0,
-                                      left: 4,
-                                      right: 4,
-                                      child: Container(
-                                        height: 3,
-                                        decoration: BoxDecoration(
-                                          color: track.color,
-                                          borderRadius: BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }
+  final isSelectedSourceSegment =
+    _notesMatchSegment(notesInBar, currentSegment);
+
+final isSegmentPasteTarget = hasSegment && isEmpty;
+
+final isSegmentHighlighted =
+    isSelectedSourceSegment || isSegmentPasteTarget;
+
+  visibleBars.add(
+    Positioned(
+      left: (barIndex * AppConstants.barWidth) - offset,
+      top: 0,
+      width: AppConstants.barWidth,
+      height: AppConstants.previewHeight + 40,
+      child: GestureDetector(
+        onLongPress: () => onBarLongPress(barIndex),
+        onTap: () => onBarTap(barIndex),
+        child: Container(
+  decoration: BoxDecoration(
+    color: isSegmentHighlighted
+        ? track.color.withValues(alpha: 0.15)
+        : Colors.transparent,
+    border: Border(
+      right: BorderSide(
+        color: Colors.grey.shade800,
+        width: 1,
+      ),
+    ),
+  ),
+  child: Stack(
+    children: [
+      CustomPaint(
+        size: Size(
+          AppConstants.barWidth,
+          AppConstants.previewHeight + 40,
+        ),
+        painter: PatternPainter(
+          notes: notesInBar,
+          color: track.color,
+          barWidth: AppConstants.barWidth,
+          previewHeight: AppConstants.previewHeight,
+          minNote: noteRange['min']!,
+          maxNote: noteRange['max']!,
+          ticksPerBar: ticksPerBar,
+        ),
+      ),
+
+      if (isSegmentPasteTarget)
+        Positioned(
+          bottom: 0,
+          left: 4,
+          right: 4,
+          child: Container(
+            height: 3,
+            decoration: BoxDecoration(
+              color: track.color,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+    ],
+  ),
+),
+      ),
+    ),
+  );
+}
 
                     final playheadX = (playheadTick * tickWidth) - offset;
-
-                    return SizedBox(
-                      width: viewportWidth,
-                      height: AppConstants.previewHeight + 40,
-                      child: Stack(
-                        clipBehavior: Clip.hardEdge,
-                        children: [
-                          ...visibleBars,
-                          if (isPlaying &&
-                              playheadX >= 0 &&
-                              playheadX <= viewportWidth)
-                            Positioned(
-                              left: playheadX,
-                              top: 0,
-                              bottom: 0,
-                              child: IgnorePointer(
-                                child: Container(
-                                  width: 3,
-                                  color: Colors.amber,
+                    return GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onHorizontalDragUpdate: onHorizontalPreviewDrag,
+                      child: SizedBox(
+                        width: viewportWidth,
+                        height: AppConstants.previewHeight + 40,
+                        child: Stack(
+                          clipBehavior: Clip.hardEdge,
+                          children: [
+                            ...visibleBars,
+                            if (isPlaying &&
+                                playheadX >= 0 &&
+                                playheadX <= viewportWidth)
+                              Positioned(
+                                left: playheadX,
+                                top: 0,
+                                bottom: 0,
+                                child: IgnorePointer(
+                                  child: Container(
+                                    width: 3,
+                                    color: Colors.amber,
+                                  ),
                                 ),
                               ),
-                            ),
-                        ],
+                          ],
+                        ),
                       ),
                     );
                   },

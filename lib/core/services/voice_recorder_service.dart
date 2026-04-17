@@ -34,6 +34,9 @@ class VoiceRecorderService {
   static const int analysisWindowSize = 4096;
   static const int hopSize = 1024;
 
+  double? _lastDetectedFreq;
+  int? _lastDetectedMidi;
+
   bool get isRecording => _isRecording;
 
   void setProjectBpm(int bpm) {
@@ -90,6 +93,8 @@ class VoiceRecorderService {
     _segments.clear();
     _currentSegmentIndex = 0;
     _startTime = DateTime.now();
+    _lastDetectedFreq = null;
+    _lastDetectedMidi = null;
 
     _streamController = StreamController<Uint8List>();
     _streamSubscription = _streamController!.stream.listen(_processAudio);
@@ -140,17 +145,47 @@ class VoiceRecorderService {
       return;
     }
 
-    final freq = _detectPitch(chunk, sampleRate);
+    double? freq = _detectPitch(chunk, sampleRate);
     if (freq == null) {
       onProgress?.call(currentTime);
       return;
     }
 
-    final midiNote = _frequencyToMidi(freq);
+    if (_lastDetectedFreq != null) {
+      final ratio = freq / _lastDetectedFreq!;
+
+      if (ratio > 1.85 && ratio < 2.15) {
+        freq /= 2.0;
+      } else if (ratio > 0.46 && ratio < 0.54) {
+        freq *= 2.0;
+      }
+    }
+
+    if (_lastDetectedFreq != null) {
+      freq = (_lastDetectedFreq! * 0.65) + (freq * 0.35);
+    }
+
+    if (freq < 80 || freq > 550) {
+      onProgress?.call(currentTime);
+      return;
+    }
+
+    int midiNote = _frequencyToMidi(freq);
+
+    if (_lastDetectedMidi != null) {
+      final jump = (midiNote - _lastDetectedMidi!).abs();
+      if (jump >= 8) {
+        midiNote = _lastDetectedMidi!;
+      }
+    }
+
     if (midiNote < AppConstants.minNote || midiNote > AppConstants.maxNote) {
       onProgress?.call(currentTime);
       return;
     }
+
+    _lastDetectedFreq = freq;
+    _lastDetectedMidi = midiNote;
 
     _segmentNoteCounts.putIfAbsent(segmentIndex, () => {});
     _segmentNoteCounts[segmentIndex]![midiNote] =
@@ -192,29 +227,88 @@ class VoiceRecorderService {
   }
 
   double? _detectPitch(List<double> samples, int sr) {
-    final size = samples.length;
-    final minLag = (sr / 1000).floor();
-    final maxLag = min((sr / 80).floor(), size ~/ 2);
+    if (samples.length < 32) return null;
 
-    double bestCorr = 0;
-    int bestLag = 0;
+    final mean = samples.reduce((a, b) => a + b) / samples.length;
+    final centered = samples.map((s) => s - mean).toList();
 
-    for (int lag = minLag; lag < maxLag; lag++) {
-      double corr = 0.0;
-      for (int i = 0; i < size - lag; i++) {
-        corr += samples[i] * samples[i + lag];
+    final windowed = <double>[];
+    for (int i = 0; i < centered.length; i++) {
+      final w = 0.5 - 0.5 * cos((2 * pi * i) / (centered.length - 1));
+      windowed.add(centered[i] * w);
+    }
+
+    const minFreq = 80.0;
+    const maxFreq = 550.0;
+
+    final tauMin = (sr / maxFreq).floor();
+    final tauMax = (sr / minFreq).floor();
+
+    if (tauMax >= windowed.length) return null;
+
+    final diff = List<double>.filled(tauMax + 1, 0);
+
+    for (int tau = 1; tau <= tauMax; tau++) {
+      double sum = 0.0;
+      for (int i = 0; i < windowed.length - tau; i++) {
+        final d = windowed[i] - windowed[i + tau];
+        sum += d * d;
       }
+      diff[tau] = sum;
+    }
 
-      if (corr > bestCorr) {
-        bestCorr = corr;
-        bestLag = lag;
+    final cmnd = List<double>.filled(tauMax + 1, 0);
+    cmnd[0] = 1.0;
+
+    double runningSum = 0.0;
+    for (int tau = 1; tau <= tauMax; tau++) {
+      runningSum += diff[tau];
+      cmnd[tau] = runningSum == 0 ? 1.0 : diff[tau] * tau / runningSum;
+    }
+
+    const threshold = 0.15;
+    int tauEstimate = -1;
+
+    for (int tau = tauMin; tau <= tauMax; tau++) {
+      if (cmnd[tau] < threshold) {
+        while (tau + 1 <= tauMax && cmnd[tau + 1] < cmnd[tau]) {
+          tau++;
+        }
+        tauEstimate = tau;
+        break;
       }
     }
 
-    if (bestLag == 0) return null;
+    if (tauEstimate == -1) {
+      double bestValue = double.infinity;
+      for (int tau = tauMin; tau <= tauMax; tau++) {
+        if (cmnd[tau] < bestValue) {
+          bestValue = cmnd[tau];
+          tauEstimate = tau;
+        }
+      }
 
-    final freq = sr / bestLag;
-    if (freq < 80 || freq > 1000) return null;
+      if (bestValue > 0.3) {
+        return null;
+      }
+    }
+
+    double betterTau = tauEstimate.toDouble();
+    if (tauEstimate > 1 && tauEstimate < tauMax) {
+      final x0 = cmnd[tauEstimate - 1];
+      final x1 = cmnd[tauEstimate];
+      final x2 = cmnd[tauEstimate + 1];
+
+      final denom = (2 * x1) - x2 - x0;
+      if (denom.abs() > 1e-9) {
+        betterTau = tauEstimate + (x2 - x0) / (2 * denom);
+      }
+    }
+
+    if (betterTau <= 0) return null;
+
+    final freq = sr / betterTau;
+    if (freq < minFreq || freq > maxFreq) return null;
 
     return freq;
   }
@@ -241,6 +335,8 @@ class VoiceRecorderService {
     notes = _shiftNotesToStart(notes);
 
     _isRecording = false;
+    _lastDetectedFreq = null;
+    _lastDetectedMidi = null;
 
     onNotesDetected?.call(notes);
     return notes;
