@@ -392,6 +392,56 @@ void _redoLastAction() {
                         ),
                       ],
                     ),
+                    const Text(
+  'Размер такта',
+  style: TextStyle(color: Colors.white70),
+),
+const SizedBox(height: 8),
+Row(
+  children: [
+    Expanded(
+      child: TextButton(
+        onPressed: () {
+          setLocalState(() {
+            AppConstants.setRhythm3();
+          });
+        },
+        style: TextButton.styleFrom(
+          backgroundColor: AppConstants.isRhythm3
+              ? Colors.deepPurple
+              : Colors.grey[800],
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Text('3/4'),
+      ),
+    ),
+    const SizedBox(width: 12),
+    Expanded(
+      child: TextButton(
+        onPressed: () {
+          setLocalState(() {
+            AppConstants.setRhythm4();
+          });
+        },
+        style: TextButton.styleFrom(
+          backgroundColor: AppConstants.isRhythm4
+              ? Colors.deepPurple
+              : Colors.grey[800],
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        child: const Text('4/4'),
+      ),
+    ),
+  ],
+),
                     const Divider(color: Colors.white24),
                     const SizedBox(height: 10),
                     ListTile(

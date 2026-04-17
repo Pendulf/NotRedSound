@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 class AppConstants {
   static int beatsPerBar = 4;
-  static int ticksPerBeat = 3;
+  static int ticksPerBeat = 4;
 
-  static int get rythm3 => ticksPerBeat = 3;
-  static int get rythm4 => ticksPerBeat = 4;
+  static bool get isRhythm3 => ticksPerBeat == 3;
+  static bool get isRhythm4 => ticksPerBeat == 4;
 
   static int bpm = 60;
   static int totalBars = 20;
@@ -32,6 +32,13 @@ class AppConstants {
   static const Color accentColor = Colors.amber;
   static const Color primaryColor = Colors.deepPurple;
 
+  static double get secondsPerBeat => 60.0 / bpm;
+  static double get secondsPerBar => secondsPerBeat * beatsPerBar;
+  static double get secondsPerTick => secondsPerBeat / ticksPerBeat;
+  static int get millisecondsPerTick => (secondsPerTick * 1000).round();
+
+  static String get timeSignatureLabel => '$beatsPerBar/4';
+
   static void updateBpm(int newBpm) {
     bpm = newBpm.clamp(40, 240);
   }
@@ -50,12 +57,11 @@ class AppConstants {
     }
   }
 
-  static double get secondsPerBeat => 60.0 / bpm;
-  static double get secondsPerBar => secondsPerBeat * beatsPerBar;
-  static double get secondsPerTick => secondsPerBeat / ticksPerBeat;
-  static int get millisecondsPerTick => (secondsPerTick * 1000).round();
+  static void setRhythm3() {
+    ticksPerBeat = 3;
+  }
 
-  static String get timeSignatureLabel => '$beatsPerBar/4';
-
-
+  static void setRhythm4() {
+    ticksPerBeat = 4;
+  }
 }
