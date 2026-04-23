@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'presentation/home/home_screen.dart';
+import 'presentation/launch/launch_screen.dart';
 import 'core/theme/app_theme.dart';
 import 'core/services/audio_service.dart';
 
@@ -33,9 +33,9 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'NotRed',
+      title: 'NotRedSound',
       theme: AppTheme.darkTheme,
-      home: const HomeScreen(),
+      home: const LaunchScreen(),
       debugShowCheckedModeBanner: false,
     );
   }

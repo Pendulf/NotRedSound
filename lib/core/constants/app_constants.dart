@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
+import '../project_style.dart';
+import '../project_styles.dart';
+
 class AppConstants {
   static int beatsPerBar = 4;
   static int ticksPerBeat = 4;
 
-  static String background = 'assets/rock_background.jpg';
-   static const Color styleColor = Colors.red;
+  static ProjectStyleType currentStyleType = ProjectStyleType.standard;
 
   static bool get isRhythm3 => ticksPerBeat == 3;
   static bool get isRhythm4 => ticksPerBeat == 4;
@@ -37,6 +39,28 @@ class AppConstants {
 
   static String get timeSignatureLabel => '$beatsPerBar/4';
 
+  static ProjectStyle get currentStyle => ProjectStyles.byType(currentStyleType);
+  static String get background => currentStyle.backgroundAsset;
+  static Color get styleColor => currentStyle.primaryColor;
+  static Color get styleAccentColor => currentStyle.secondaryColor;
+  static String get styleLabel => currentStyle.displayName;
+
+  static const List<Color> brandGradient = [
+    Colors.red,
+    Colors.purple,
+    Colors.blue,
+  ];
+
+  static const List<Color> nameGradient = [
+    Colors.white,
+    Colors.white,
+    Colors.orange,
+  ];
+
+  static void applyProjectStyle(ProjectStyleType styleType) {
+    currentStyleType = styleType;
+  }
+
   static void updateBpm(int newBpm) {
     bpm = newBpm.clamp(40, 240);
   }
@@ -53,6 +77,13 @@ class AppConstants {
     if (newTicksPerBeat != null) {
       ticksPerBeat = newTicksPerBeat.clamp(1, 16);
     }
+  }
+
+  static void resetProjectMetrics() {
+    bpm = 60;
+    totalBars = 20;
+    beatsPerBar = 4;
+    ticksPerBeat = 4;
   }
 
   static void setRhythm3() {

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../core/services/audio_service.dart';
+import '../../core/constants/app_constants.dart';
 import '../../data/models/track_model.dart';
 
 class _InstrumentSection {
@@ -38,7 +38,7 @@ class _InstrumentPickerDialogState extends State<_InstrumentPickerDialog> {
 
     int selectedSectionIndex = -1;
 
-    sections = AudioService.instrumentCategories.entries.map((entry) {
+    sections = AppConstants.currentStyle.instrumentCategories.entries.map((entry) {
       return _InstrumentSection(
         title: entry.key,
         instruments: entry.value,

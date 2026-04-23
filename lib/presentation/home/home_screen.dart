@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/dialogs/instrument_picker_dialog.dart';
+import '../../core/project_style.dart';
+import '../../core/project_styles.dart';
 import '../../data/models/pattern_segment.dart';
 import '../../data/models/track_model.dart';
 import '../../data/repositories/track_repository.dart';
@@ -12,7 +14,14 @@ import 'home_controller.dart';
 import 'widgets/track_row_widget.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final bool loadSavedProject;
+  final ProjectStyleType initialStyleType;
+
+  const HomeScreen({
+    super.key,
+    this.loadSavedProject = true,
+    this.initialStyleType = ProjectStyleType.standard,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -41,7 +50,16 @@ class _HomeScreenState extends State<HomeScreen> {
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       _calculateBarWidth();
-      await _controller.loadProject();
+
+      if (widget.loadSavedProject) {
+        final loaded = await _controller.loadProject(styleType: widget.initialStyleType);
+        if (!loaded) {
+          _controller.createNewProject(styleType: widget.initialStyleType);
+        }
+      } else {
+        _controller.createNewProject(styleType: widget.initialStyleType);
+      }
+
       if (mounted) {
         setState(() {});
       }
@@ -248,6 +266,70 @@ class _HomeScreenState extends State<HomeScreen> {
     return ((value / 5).round() * 5).clamp(40, 240);
   }
 
+
+  Future<void> _showStyleSelector({
+    required ProjectStyleType selectedType,
+    required ValueChanged<ProjectStyleType> onSelected,
+  }) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: ProjectStyles.all.map((style) {
+                final isSelected = style.type == selectedType;
+
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
+                  child: ListTile(
+                    onTap: () {
+                      Navigator.pop(context);
+                      onSelected(style.type);
+                    },
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(
+                        color: isSelected
+                            ? style.primaryColor
+                            : Colors.white.withValues(alpha: 0.08),
+                      ),
+                    ),
+                    tileColor: Colors.white.withValues(alpha: 0.03),
+                    leading: CircleAvatar(
+                      backgroundColor: style.primaryColor,
+                      child: isSelected
+                          ? const Icon(Icons.check, color: Colors.white)
+                          : null,
+                    ),
+                    title: Text(
+                      style.displayName,
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                    subtitle: Text(
+                      style.type == ProjectStyleType.standard
+                          ? 'Полный режим проекта'
+                          : 'Сменить фон, цвет и набор инструментов',
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.65),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showProjectPopup() {
     showDialog(
       context: context,
@@ -255,6 +337,8 @@ class _HomeScreenState extends State<HomeScreen> {
         int tempBpm = AppConstants.bpm;
         int tempBars = AppConstants.totalBars;
         int tempBeatsPerBar = AppConstants.beatsPerBar;
+        int tempTicksPerBeat = AppConstants.ticksPerBeat;
+        ProjectStyleType tempStyleType = AppConstants.currentStyleType;
 
         DateTime? lastTapTime;
         final List<int> tapIntervalsMs = [];
@@ -294,16 +378,48 @@ class _HomeScreenState extends State<HomeScreen> {
 
         return StatefulBuilder(
           builder: (context, setLocalState) {
+            final currentStyle = ProjectStyles.byType(tempStyleType);
+
             return AlertDialog(
               backgroundColor: Colors.grey[850],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(
-                    color: AppConstants.styleColor, width: 1.2),
+                side: BorderSide(
+                  color: currentStyle.primaryColor,
+                  width: 1.2,
+                ),
               ),
-              title: const Text(
-                'Проект',
-                style: TextStyle(color: Colors.white),
+              title: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => _showStyleSelector(
+                  selectedType: tempStyleType,
+                  onSelected: (styleType) {
+                    setLocalState(() {
+                      tempStyleType = styleType;
+                    });
+                  },
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'Проект',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Стиль: ${currentStyle.displayName}',
+                        style: TextStyle(
+                          color: currentStyle.primaryColor,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
               content: SingleChildScrollView(
                 child: Column(
@@ -405,12 +521,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: TextButton(
                             onPressed: () {
                               setLocalState(() {
-                                AppConstants.setRhythm3();
+                                tempBeatsPerBar = 3;
+                                tempTicksPerBeat = 3;
                               });
                             },
                             style: TextButton.styleFrom(
-                              backgroundColor: AppConstants.isRhythm3
-                                  ? AppConstants.styleColor
+                              backgroundColor: tempTicksPerBeat == 3
+                                  ? currentStyle.primaryColor
                                   : Colors.grey[800],
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -426,12 +543,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: TextButton(
                             onPressed: () {
                               setLocalState(() {
-                                AppConstants.setRhythm4();
+                                tempBeatsPerBar = 4;
+                                tempTicksPerBeat = 4;
                               });
                             },
                             style: TextButton.styleFrom(
-                              backgroundColor: AppConstants.isRhythm4
-                                  ? AppConstants.styleColor
+                              backgroundColor: tempTicksPerBeat == 4
+                                  ? currentStyle.primaryColor
                                   : Colors.grey[800],
                               foregroundColor: Colors.white,
                               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -453,11 +571,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         'Сохранить проект',
                         style: TextStyle(color: Colors.white),
                       ),
-                      onTap: () {
+                      onTap: () async {
+                        await _controller.switchProjectStyle(tempStyleType);
                         AppConstants.updateBpm(tempBpm);
                         AppConstants.updateTotalBars(tempBars);
                         AppConstants.updateTimeSignature(
                           newBeatsPerBar: tempBeatsPerBar,
+                          newTicksPerBeat: tempTicksPerBeat,
                         );
                         _calculateBarWidth();
                         Navigator.pop(context);
@@ -472,11 +592,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         'Отправить проект',
                         style: TextStyle(color: Colors.white),
                       ),
-                      onTap: () {
+                      onTap: () async {
+                        await _controller.switchProjectStyle(tempStyleType);
                         AppConstants.updateBpm(tempBpm);
                         AppConstants.updateTotalBars(tempBars);
                         AppConstants.updateTimeSignature(
                           newBeatsPerBar: tempBeatsPerBar,
+                          newTicksPerBeat: tempTicksPerBeat,
                         );
                         _calculateBarWidth();
                         Navigator.pop(context);
@@ -506,11 +628,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: const Text('Отмена'),
                 ),
                 ElevatedButton(
-                  onPressed: () {
+                  onPressed: () async {
+                    await _controller.switchProjectStyle(tempStyleType);
                     AppConstants.updateBpm(tempBpm);
                     AppConstants.updateTotalBars(tempBars);
                     AppConstants.updateTimeSignature(
                       newBeatsPerBar: tempBeatsPerBar,
+                      newTicksPerBeat: tempTicksPerBeat,
                     );
                     Navigator.pop(context);
                     _calculateBarWidth();
@@ -831,7 +955,7 @@ class _HomeScreenState extends State<HomeScreen> {
           // Сама надпись больше не масштабируется
           ShaderMask(
             shaderCallback: (bounds) => const LinearGradient(
-              colors: [Colors.red, Colors.purple, Colors.blue],
+              colors: AppConstants.brandGradient,
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
             ).createShader(bounds),
@@ -902,7 +1026,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             child: Column(
               children: [
-                const SizedBox(height: 35),
+                SizedBox(height: MediaQuery.of(context).padding.top + 8),
                 Container(
                   clipBehavior: Clip.hardEdge,
                   padding: const EdgeInsets.symmetric(
@@ -1234,7 +1358,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         width: 50,
                         height: 50,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: AppConstants.styleColor,
                         ),
@@ -1255,7 +1379,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         width: 55,
                         height: 55,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: AppConstants.styleColor,
                         ),
@@ -1298,7 +1422,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Container(
                         width: 50,
                         height: 50,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           shape: BoxShape.circle,
                           color: AppConstants.styleColor,
                         ),

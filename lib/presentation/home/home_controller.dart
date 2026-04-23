@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:not_red_sound/core/constants/app_constants.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../../core/project_style.dart';
+import '../../core/project_styles.dart';
 import '../../core/services/audio_service.dart';
 import '../../data/models/pattern_segment.dart';
 import '../../data/models/track_model.dart';
@@ -214,15 +216,78 @@ class HomeController extends ChangeNotifier {
   }
 
   void addTrack() {
+    final currentStyle = AppConstants.currentStyle;
+    final trackIndex = tracks.length;
+
     final newTrack = Track(
       id: DateTime.now().microsecondsSinceEpoch.toString(),
-      name: 'Дорожка ${tracks.length + 1}',
-      color: Colors.primaries[tracks.length % Colors.primaries.length],
+      name: currentStyle.defaultTrackName(trackIndex),
+      color: currentStyle.colorForTrack(trackIndex),
       notes: [],
-      instrument: 'Пианино',
+      instrument: currentStyle.defaultTrackInstrument(trackIndex),
       volume: 1.0,
     );
     _repository.addTrack(newTrack);
+    notifyListeners();
+  }
+
+  Future<void> switchProjectStyle(ProjectStyleType styleType) async {
+    final previousStyleType = AppConstants.currentStyleType;
+    final previousStyle = AppConstants.currentStyle;
+
+    if (previousStyleType == styleType) {
+      AppConstants.applyProjectStyle(styleType);
+      notifyListeners();
+      return;
+    }
+
+    await saveProject(styleType: previousStyle.type);
+
+    final loaded = await loadProject(styleType: styleType);
+    if (!loaded) {
+      createNewProject(styleType: styleType);
+      await saveProject(styleType: styleType);
+    } else {
+      AppConstants.applyProjectStyle(styleType);
+      notifyListeners();
+    }
+  }
+
+  void createNewProject({
+    required ProjectStyleType styleType,
+  }) {
+    if (_audioService.isPlaying) {
+      _audioService.stopPlayback();
+    }
+
+    AppConstants.applyProjectStyle(styleType);
+    AppConstants.resetProjectMetrics();
+
+    final existingIds = tracks.map((t) => t.id).toList();
+    for (final id in existingIds) {
+      _repository.deleteTrack(id);
+    }
+
+    openedTracks.clear();
+    _trackSegments.clear();
+    _savedSegments.clear();
+    _playbackStartBar = 0;
+
+    final style = AppConstants.currentStyle;
+    for (int i = 0; i < style.starterTracks.length; i++) {
+      final starter = style.starterTracks[i];
+      _repository.addTrack(
+        Track(
+          id: '${style.id}_${DateTime.now().microsecondsSinceEpoch}_$i',
+          name: starter.name,
+          color: style.colorForTrack(i),
+          notes: [],
+          instrument: starter.instrument,
+          volume: 1.0,
+        ),
+      );
+    }
+
     notifyListeners();
   }
 
@@ -347,26 +412,35 @@ class HomeController extends ChangeNotifier {
     );
   }
 
-  Future<File> _projectFile() async {
+  Future<File> _projectFile({ProjectStyleType? styleType}) async {
     final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/notred_project.json');
+    final resolvedType = styleType ?? AppConstants.currentStyleType;
+    final styleId = ProjectStyles.byType(resolvedType).id;
+    return File('${dir.path}/notred_project_$styleId.json');
   }
 
-  Future<void> saveProject() async {
-    final file = await _projectFile();
+  Future<void> saveProject({ProjectStyleType? styleType}) async {
+    final resolvedType = styleType ?? AppConstants.currentStyleType;
+    final style = ProjectStyles.byType(resolvedType);
+    final file = await _projectFile(styleType: resolvedType);
 
     final data = {
       'bpm': AppConstants.bpm,
       'totalBars': AppConstants.totalBars,
+      'beatsPerBar': AppConstants.beatsPerBar,
+      'ticksPerBeat': AppConstants.ticksPerBeat,
+      'styleId': style.id,
       'tracks': tracks.map((t) => t.toJson()).toList(),
     };
 
     await file.writeAsString(jsonEncode(data));
   }
 
-  Future<bool> loadProject() async {
+  Future<bool> loadProject({ProjectStyleType? styleType}) async {
+    final resolvedType = styleType ?? AppConstants.currentStyleType;
+
     try {
-      final file = await _projectFile();
+      final file = await _projectFile(styleType: resolvedType);
       if (!await file.exists()) {
         return false;
       }
@@ -375,9 +449,20 @@ class HomeController extends ChangeNotifier {
 
       final bpm = json['bpm'] as int? ?? AppConstants.bpm;
       final totalBars = json['totalBars'] as int? ?? AppConstants.totalBars;
+      final beatsPerBar =
+          json['beatsPerBar'] as int? ?? AppConstants.beatsPerBar;
+      final ticksPerBeat =
+          json['ticksPerBeat'] as int? ?? AppConstants.ticksPerBeat;
+      final styleId = json['styleId'] as String?;
 
+      final loadedStyle = ProjectStyles.byId(styleId);
+      AppConstants.applyProjectStyle(loadedStyle.type);
       AppConstants.updateBpm(bpm);
       AppConstants.updateTotalBars(totalBars);
+      AppConstants.updateTimeSignature(
+        newBeatsPerBar: beatsPerBar,
+        newTicksPerBeat: ticksPerBeat,
+      );
 
       final loadedTracks = (json['tracks'] as List<dynamic>? ?? [])
           .map((e) => Track.fromJson(Map<String, dynamic>.from(e)))
@@ -388,12 +473,16 @@ class HomeController extends ChangeNotifier {
         _repository.deleteTrack(id);
       }
 
-      for (final track in loadedTracks) {
-        _repository.addTrack(track);
+      if (loadedTracks.isEmpty) {
+        createNewProject(styleType: loadedStyle.type);
+      } else {
+        for (final track in loadedTracks) {
+          _repository.addTrack(track);
+        }
       }
 
       notifyListeners();
-      return loadedTracks.isNotEmpty;
+      return true;
     } catch (e) {
       debugPrint('Load project error: $e');
       return false;

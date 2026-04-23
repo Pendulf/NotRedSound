@@ -1155,8 +1155,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
           ),
         ],
       ),
-    );
-  }
+    );  }
 
   
   
