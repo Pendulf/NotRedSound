@@ -98,13 +98,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _pushHistory() {
-  _history.add(_cloneTracks(_controller.tracks));
-  _redoHistory.clear();
+    _history.add(_cloneTracks(_controller.tracks));
+    _redoHistory.clear();
 
-  if (_history.length > 100) {
-    _history.removeAt(0);
+    if (_history.length > 100) {
+      _history.removeAt(0);
+    }
   }
-}
 
   bool get _canUndo => _history.isNotEmpty && !_controller.isPlaying;
   bool get _canRedo => _redoHistory.isNotEmpty && !_controller.isPlaying;
@@ -120,20 +120,21 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _undoLastAction() {
-  if (!_canUndo) return;
+    if (!_canUndo) return;
 
-  _redoHistory.add(_cloneTracks(_controller.tracks));
-  final snapshot = _history.removeLast();
-  _restoreTracksFromSnapshot(snapshot);
-}
+    _redoHistory.add(_cloneTracks(_controller.tracks));
+    final snapshot = _history.removeLast();
+    _restoreTracksFromSnapshot(snapshot);
+  }
 
-void _redoLastAction() {
-  if (!_canRedo) return;
+  void _redoLastAction() {
+    if (!_canRedo) return;
 
-  _history.add(_cloneTracks(_controller.tracks));
-  final snapshot = _redoHistory.removeLast();
-  _restoreTracksFromSnapshot(snapshot);
-}
+    _history.add(_cloneTracks(_controller.tracks));
+    final snapshot = _redoHistory.removeLast();
+    _restoreTracksFromSnapshot(snapshot);
+  }
+
   void _startTitlePulse() {
     if (_titlePulseTimer != null) return;
 
@@ -297,7 +298,8 @@ void _redoLastAction() {
               backgroundColor: Colors.grey[850],
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(16),
-                side: const BorderSide(color: Colors.deepPurple, width: 1.2),
+                side: const BorderSide(
+                    color: AppConstants.styleColor, width: 1.2),
               ),
               title: const Text(
                 'Проект',
@@ -393,55 +395,55 @@ void _redoLastAction() {
                       ],
                     ),
                     const Text(
-  'Размер такта',
-  style: TextStyle(color: Colors.white70),
-),
-const SizedBox(height: 8),
-Row(
-  children: [
-    Expanded(
-      child: TextButton(
-        onPressed: () {
-          setLocalState(() {
-            AppConstants.setRhythm3();
-          });
-        },
-        style: TextButton.styleFrom(
-          backgroundColor: AppConstants.isRhythm3
-              ? Colors.deepPurple
-              : Colors.grey[800],
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: const Text('3/4'),
-      ),
-    ),
-    const SizedBox(width: 12),
-    Expanded(
-      child: TextButton(
-        onPressed: () {
-          setLocalState(() {
-            AppConstants.setRhythm4();
-          });
-        },
-        style: TextButton.styleFrom(
-          backgroundColor: AppConstants.isRhythm4
-              ? Colors.deepPurple
-              : Colors.grey[800],
-          foregroundColor: Colors.white,
-          padding: const EdgeInsets.symmetric(vertical: 12),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
-          ),
-        ),
-        child: const Text('4/4'),
-      ),
-    ),
-  ],
-),
+                      'Размер такта',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () {
+                              setLocalState(() {
+                                AppConstants.setRhythm3();
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppConstants.isRhythm3
+                                  ? AppConstants.styleColor
+                                  : Colors.grey[800],
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text('3/4'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextButton(
+                            onPressed: () {
+                              setLocalState(() {
+                                AppConstants.setRhythm4();
+                              });
+                            },
+                            style: TextButton.styleFrom(
+                              backgroundColor: AppConstants.isRhythm4
+                                  ? AppConstants.styleColor
+                                  : Colors.grey[800],
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text('4/4'),
+                          ),
+                        ),
+                      ],
+                    ),
                     const Divider(color: Colors.white24),
                     const SizedBox(height: 10),
                     ListTile(
@@ -487,7 +489,7 @@ Row(
                       leading:
                           const Icon(Icons.delete_forever, color: Colors.red),
                       title: const Text(
-                        'Удалить проект',
+                        'Очистить проект',
                         style: TextStyle(color: Colors.red),
                       ),
                       onTap: () {
@@ -515,8 +517,7 @@ Row(
                     setState(() {});
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                  ),
+                      backgroundColor: AppConstants.styleColor),
                   child: const Text('Применить'),
                 ),
               ],
@@ -797,7 +798,7 @@ Row(
                             _controller.isPlaying ? (_titlePulseOn ? 3 : 1) : 1,
                       ),
                       BoxShadow(
-                        color: Colors.purple.withValues(
+                        color: AppConstants.styleColor.withValues(
                           alpha: _controller.isPlaying
                               ? (_titlePulseOn ? 0.24 : 0.14)
                               : 0.14,
@@ -885,7 +886,7 @@ Row(
         children: [
           Positioned.fill(
             child: Image.asset(
-              'assets/electro_background.jpg',
+              AppConstants.background,
               fit: BoxFit.cover,
               errorBuilder: (context, error, stackTrace) {
                 return Container(color: Colors.grey[900]);
@@ -923,7 +924,7 @@ Row(
                       end: Alignment.bottomRight,
                     ),
                     border: Border.all(
-                      color: Colors.deepPurple.withValues(alpha: 0.6),
+                      color: AppConstants.styleColor.withValues(alpha: 0.6),
                       width: 1.2,
                     ),
                     boxShadow: [
@@ -947,26 +948,26 @@ Row(
                           borderRadius: BorderRadius.circular(22),
                           gradient: LinearGradient(
                             colors: [
-                              Colors.red.withValues(alpha: 0.18),
-                              Colors.purple.withValues(alpha: 0.18),
-                              Colors.blue.withValues(alpha: 0.18),
+                              Colors.red.withValues(alpha: 0.10),
+                              Colors.purple.withValues(alpha: 0.10),
+                              Colors.blue.withValues(alpha: 0.10),
                             ],
                             begin: Alignment.topLeft,
                             end: Alignment.bottomRight,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.red.withValues(alpha: 0.10),
+                              color: Colors.red.withValues(alpha: 0.20),
                               blurRadius: 10,
                               spreadRadius: 1,
                             ),
                             BoxShadow(
-                              color: Colors.purple.withValues(alpha: 0.10),
+                              color: Colors.purple.withValues(alpha: 0.20),
                               blurRadius: 14,
                               spreadRadius: 1,
                             ),
                             BoxShadow(
-                              color: Colors.blue.withValues(alpha: 0.10),
+                              color: Colors.blue.withValues(alpha: 0.20),
                               blurRadius: 18,
                               spreadRadius: 2,
                             ),
@@ -990,7 +991,7 @@ Row(
                                     height: 38,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: Colors.deepPurple
+                                      color: AppConstants.styleColor
                                           .withValues(alpha: 0.82),
                                     ),
                                   ),
@@ -1016,7 +1017,7 @@ Row(
                         width: 200,
                         height: 40,
                         decoration: BoxDecoration(
-                          color: Colors.deepPurple.withValues(alpha: 0.9),
+                          color: AppConstants.styleColor.withValues(alpha: 0.9),
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Material(
@@ -1065,48 +1066,46 @@ Row(
                                 ),
                               ),
                               child: ListView.builder(
-                                scrollDirection: Axis.horizontal,
-                                controller:
-                                    _controller.horizontalScrollController,
-                                physics: const ClampingScrollPhysics(),
-                                itemCount: AppConstants.maxBars,
-                                itemBuilder: (context, index) {
-                                  final isSelected = selectedBar == index;
+  padding: EdgeInsets.zero,
+  scrollDirection: Axis.horizontal,
+  controller: _controller.horizontalScrollController,
+  physics: const ClampingScrollPhysics(),
+  itemCount: AppConstants.maxBars,
+  itemBuilder: (context, index) {
+    final isSelected = selectedBar == index;
 
-                                  return GestureDetector(
-                                    behavior: HitTestBehavior.opaque,
-                                    onTap: () =>
-                                        _controller.setPlaybackStartBar(index),
-                                    child: Container(
-                                      width: AppConstants.barWidth,
-                                      alignment: Alignment.center,
-                                      decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? Colors.amber
-                                                .withValues(alpha: 0.18)
-                                            : Colors.transparent,
-                                        border: Border(
-                                          right: BorderSide(
-                                            color: index ==
-                                                    AppConstants.maxBars - 1
-                                                ? Colors.transparent
-                                                : Colors.amber,
-                                            width: 2,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Text(
-                                        '${index + 1}',
-                                        style: const TextStyle(
-                                          color: Colors.amber,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                    ),
-                                  );
-                                },
-                              ),
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => _controller.setPlaybackStartBar(index),
+      child: Container(
+        width: AppConstants.barWidth,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: isSelected
+              ? Colors.amber.withValues(alpha: 0.18)
+              : Colors.transparent,
+          border: Border(
+            
+            right: BorderSide(
+              color: index == AppConstants.maxBars - 1
+                  ? Colors.transparent
+                  : Colors.amber,
+              width: 2,
+            ),
+          ),
+        ),
+        child: Text(
+          '${index + 1}',
+          style: const TextStyle(
+            color: Colors.amber,
+            fontSize: 14,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  },
+),
                             ),
                             _buildPlayheadHeaderOverlay(),
                           ],
@@ -1212,7 +1211,7 @@ Row(
           if (hasTracks)
             Positioned(
               left: 10,
-              right:10,
+              right: 10,
               bottom: 20,
               child: Padding(
                 padding: const EdgeInsets.symmetric(
@@ -1226,95 +1225,98 @@ Row(
                     boxShadow: [
                       BoxShadow(
                           blurRadius: 50,
-                          color: const Color.fromARGB(71, 104, 58, 183)),
+                          color: AppConstants.styleColor.withAlpha(50)),
                     ],
                   ),
                   child: Row(
-  mainAxisAlignment: MainAxisAlignment.center,
-  children: [
-    Container(
-      width: 50,
-      height: 50,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.deepPurple,
-      ),
-      child: IconButton(
-        onPressed: _canUndo ? _undoLastAction : null,
-        padding: EdgeInsets.zero,
-        splashRadius: 26,
-        icon: Icon(
-          Icons.undo,
-          size: 22,
-          color: Colors.white.withValues(
-            alpha: _canUndo ? 1.0 : 0.4,
-          ),
-        ),
-      ),
-    ),
-    const SizedBox(width: 45),
-    Container(
-      width: 55,
-      height: 55,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.deepPurple,
-      ),
-      child: IconButton(
-        onPressed: () {
-          if (_controller.tracks.isEmpty) {
-            _showSnackBar(
-              'Добавьте дорожку',
-              Colors.orange,
-            );
-            return;
-          }
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppConstants.styleColor,
+                        ),
+                        child: IconButton(
+                          onPressed: _canUndo ? _undoLastAction : null,
+                          padding: EdgeInsets.zero,
+                          splashRadius: 26,
+                          icon: Icon(
+                            Icons.undo,
+                            size: 22,
+                            color: Colors.white.withValues(
+                              alpha: _canUndo ? 1.0 : 0.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 45),
+                      Container(
+                        width: 55,
+                        height: 55,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppConstants.styleColor,
+                        ),
+                        child: IconButton(
+                          onPressed: () {
+                            if (_controller.tracks.isEmpty) {
+                              _showSnackBar(
+                                'Добавьте дорожку',
+                                Colors.orange,
+                              );
+                              return;
+                            }
 
-          final hasNotes = _controller.tracks.any((t) => t.notes.isNotEmpty);
+                            final hasNotes = _controller.tracks
+                                .any((t) => t.notes.isNotEmpty);
 
-          if (!hasNotes) {
-            _showSnackBar(
-              'Добавьте ноты',
-              Colors.orange,
-            );
-            return;
-          }
+                            if (!hasNotes) {
+                              _showSnackBar(
+                                'Добавьте ноты',
+                                Colors.orange,
+                              );
+                              return;
+                            }
 
-          _controller.togglePlayback();
-          setState(() {});
-        },
-        padding: EdgeInsets.zero,
-        splashRadius: 30,
-        icon: Icon(
-          _controller.isPlaying ? Icons.stop : Icons.play_arrow,
-          size: 25,
-          color: Colors.white,
-        ),
-      ),
-    ),
-    const SizedBox(width: 45),
-    Container(
-      width: 50,
-      height: 50,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: Colors.deepPurple,
-      ),
-      child: IconButton(
-        onPressed: _canRedo ? _redoLastAction : null,
-        padding: EdgeInsets.zero,
-        splashRadius: 26,
-        icon: Icon(
-          Icons.redo,
-          size: 22,
-          color: Colors.white.withValues(
-            alpha: _canRedo ? 1.0 : 0.4,
-          ),
-        ),
-      ),
-    ),
-  ],
-),
+                            _controller.togglePlayback();
+                            setState(() {});
+                          },
+                          padding: EdgeInsets.zero,
+                          splashRadius: 30,
+                          icon: Icon(
+                            _controller.isPlaying
+                                ? Icons.stop
+                                : Icons.play_arrow,
+                            size: 25,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 45),
+                      Container(
+                        width: 50,
+                        height: 50,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: AppConstants.styleColor,
+                        ),
+                        child: IconButton(
+                          onPressed: _canRedo ? _redoLastAction : null,
+                          padding: EdgeInsets.zero,
+                          splashRadius: 26,
+                          icon: Icon(
+                            Icons.redo,
+                            size: 22,
+                            color: Colors.white.withValues(
+                              alpha: _canRedo ? 1.0 : 0.4,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -1369,7 +1371,7 @@ Row(
               style: TextStyle(fontSize: 18),
             ),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.deepPurple,
+              backgroundColor: AppConstants.styleColor,
               foregroundColor: Colors.white,
               padding: const EdgeInsets.symmetric(
                 horizontal: 32,

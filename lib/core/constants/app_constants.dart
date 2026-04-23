@@ -4,6 +4,9 @@ class AppConstants {
   static int beatsPerBar = 4;
   static int ticksPerBeat = 4;
 
+  static String background = 'assets/rock_background.jpg';
+   static const Color styleColor = Colors.red;
+
   static bool get isRhythm3 => ticksPerBeat == 3;
   static bool get isRhythm4 => ticksPerBeat == 4;
 
@@ -26,11 +29,6 @@ class AppConstants {
 
   static const int defaultNoteDurationTicks = 1;
   static const int minNoteDurationTicks = 1;
-
-  static const Color backgroundColor = Color(0xFF121212);
-  static const Color surfaceColor = Color(0xFF1E1E1E);
-  static const Color accentColor = Colors.amber;
-  static const Color primaryColor = Colors.deepPurple;
 
   static double get secondsPerBeat => 60.0 / bpm;
   static double get secondsPerBar => secondsPerBeat * beatsPerBar;
