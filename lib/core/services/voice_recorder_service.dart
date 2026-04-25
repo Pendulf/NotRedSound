@@ -9,13 +9,41 @@ import 'package:permission_handler/permission_handler.dart';
 
 import '../constants/app_constants.dart';
 
+enum VoiceRecognitionMode {
+  melody,
+  frequencyBands,
+}
+
+class VoiceFrequencyBand {
+  final String label;
+  final int midiNote;
+  final double minHz;
+  final double maxHz;
+  final double centerHz;
+
+  const VoiceFrequencyBand({
+    required this.label,
+    required this.midiNote,
+    required this.minHz,
+    required this.maxHz,
+    required this.centerHz,
+  });
+
+  bool contains(double frequencyHz) {
+    return frequencyHz >= minHz && frequencyHz <= maxHz;
+  }
+}
+
 class VoiceRecorderService {
   final FlutterSoundRecorder _recorder = FlutterSoundRecorder();
 
   StreamController<Uint8List>? _streamController;
   StreamSubscription<Uint8List>? _streamSubscription;
+  StreamSubscription<dynamic>? _interruptionSubscription;
+  StreamSubscription<dynamic>? _becomingNoisySubscription;
 
   bool _isRecording = false;
+  bool _isInitialized = false;
   DateTime? _startTime;
 
   final List<double> _buffer = [];
@@ -29,6 +57,8 @@ class VoiceRecorderService {
   Function(double progress)? onProgress;
 
   bool mergeRepeatedNotes = false;
+  VoiceRecognitionMode recognitionMode = VoiceRecognitionMode.melody;
+  List<VoiceFrequencyBand> frequencyBands = const [];
 
   static const int sampleRate = 44100;
   static const int analysisWindowSize = 4096;
@@ -54,7 +84,19 @@ class VoiceRecorderService {
     return status.isGranted;
   }
 
+  void setMelodyRecognitionMode() {
+    recognitionMode = VoiceRecognitionMode.melody;
+    frequencyBands = const [];
+  }
+
+  void setFrequencyBandRecognitionMode(List<VoiceFrequencyBand> bands) {
+    recognitionMode = VoiceRecognitionMode.frequencyBands;
+    frequencyBands = List<VoiceFrequencyBand>.unmodifiable(bands);
+  }
+
   Future<void> initialize() async {
+    if (_isInitialized) return;
+
     try {
       final session = await AudioSession.instance;
       await session.configure(
@@ -64,25 +106,47 @@ class VoiceRecorderService {
           avAudioSessionRouteSharingPolicy:
               AVAudioSessionRouteSharingPolicy.defaultPolicy,
           avAudioSessionSetActiveOptions:
-              AVAudioSessionSetActiveOptions.none,
+              AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
           androidAudioAttributes: AndroidAudioAttributes(
-            contentType: AndroidAudioContentType.music,
+            contentType: AndroidAudioContentType.speech,
             flags: AndroidAudioFlags.none,
-            usage: AndroidAudioUsage.media,
+            usage: AndroidAudioUsage.voiceCommunication,
           ),
           androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
           androidWillPauseWhenDucked: true,
         ),
       );
 
+      _interruptionSubscription ??=
+          session.interruptionEventStream.listen((event) {
+        if (event.begin && _isRecording) {
+          stopRecording();
+        }
+      });
+
+      _becomingNoisySubscription ??=
+          session.becomingNoisyEventStream.listen((_) {
+        if (_isRecording) {
+          stopRecording();
+        }
+      });
+
       await _recorder.openRecorder();
+      _isInitialized = true;
     } catch (e) {
       debugPrint('Ошибка инициализации voice recorder: $e');
+      _isInitialized = false;
     }
   }
 
   Future<void> startRecording() async {
     if (_isRecording) return;
+
+    await initialize();
+
+    if (!_isInitialized) {
+      throw Exception('Рекордер не инициализирован');
+    }
 
     if (!await requestPermissions()) {
       throw Exception('Микрофон не доступен');
@@ -97,16 +161,34 @@ class VoiceRecorderService {
     _lastDetectedMidi = null;
 
     _streamController = StreamController<Uint8List>();
-    _streamSubscription = _streamController!.stream.listen(_processAudio);
-
-    await _recorder.startRecorder(
-      toStream: _streamController!.sink,
-      codec: Codec.pcm16,
-      sampleRate: sampleRate,
-      numChannels: 1,
+    _streamSubscription = _streamController!.stream.listen(
+      _processAudio,
+      onError: (error) {
+        debugPrint('Ошибка потока записи: $error');
+      },
+      cancelOnError: false,
     );
 
-    _isRecording = true;
+    try {
+      final session = await AudioSession.instance;
+      await session.setActive(true);
+
+      await _recorder.startRecorder(
+        toStream: _streamController!.sink,
+        codec: Codec.pcm16,
+        sampleRate: sampleRate,
+        numChannels: 1,
+      );
+
+      _isRecording = true;
+    } catch (e) {
+      await _streamSubscription?.cancel();
+      await _streamController?.close();
+      _streamSubscription = null;
+      _streamController = null;
+      _isRecording = false;
+      rethrow;
+    }
   }
 
   void _processAudio(Uint8List buffer) {
@@ -138,6 +220,16 @@ class VoiceRecorderService {
     if (segmentIndex != _currentSegmentIndex) {
       _finalizeSegment(_currentSegmentIndex);
       _currentSegmentIndex = segmentIndex;
+    }
+
+    if (recognitionMode == VoiceRecognitionMode.frequencyBands) {
+      _analyzeFrequencyBandChunk(
+        chunk: chunk,
+        rms: rms,
+        segmentIndex: segmentIndex,
+        currentTime: currentTime,
+      );
+      return;
     }
 
     if (rms < 0.02) {
@@ -194,6 +286,104 @@ class VoiceRecorderService {
     onProgress?.call(currentTime);
   }
 
+  void _analyzeFrequencyBandChunk({
+    required List<double> chunk,
+    required double rms,
+    required int segmentIndex,
+    required double currentTime,
+  }) {
+    if (frequencyBands.isEmpty) {
+      onProgress?.call(currentTime);
+      return;
+    }
+
+    if (rms < 0.012) {
+      onProgress?.call(currentTime);
+      return;
+    }
+
+    final detectedBand = _detectBestFrequencyBand(chunk, sampleRate);
+    if (detectedBand == null) {
+      onProgress?.call(currentTime);
+      return;
+    }
+
+    _lastDetectedMidi = detectedBand.midiNote;
+    _lastDetectedFreq = detectedBand.centerHz;
+
+    _segmentNoteCounts.putIfAbsent(segmentIndex, () => {});
+    _segmentNoteCounts[segmentIndex]![detectedBand.midiNote] =
+        (_segmentNoteCounts[segmentIndex]![detectedBand.midiNote] ?? 0) + 1;
+
+    onProgress?.call(currentTime);
+  }
+
+  VoiceFrequencyBand? _detectBestFrequencyBand(List<double> samples, int sr) {
+    if (samples.length < 32) return null;
+
+    final mean = samples.reduce((a, b) => a + b) / samples.length;
+    final centered = samples.map((s) => s - mean).toList(growable: false);
+    final zcrHz = _estimateZeroCrossingFrequency(centered, sr);
+
+    VoiceFrequencyBand? bestBand;
+    double bestScore = 0;
+
+    for (final band in frequencyBands) {
+      final power = _goertzelPower(centered, sr, band.centerHz);
+      final zcrBoost = band.contains(zcrHz) ? 1.35 : 1.0;
+      final score = power * zcrBoost;
+
+      if (score > bestScore) {
+        bestScore = score;
+        bestBand = band;
+      }
+    }
+
+    if (bestBand == null) return null;
+
+    final broadbandPower = centered.fold<double>(0, (sum, x) => sum + x * x);
+    if (broadbandPower <= 0) return null;
+
+    final relativeScore = bestScore / broadbandPower;
+    if (relativeScore < 0.0018 && !bestBand.contains(zcrHz)) {
+      return null;
+    }
+
+    return bestBand;
+  }
+
+  double _estimateZeroCrossingFrequency(List<double> samples, int sr) {
+    int crossings = 0;
+    for (int i = 1; i < samples.length; i++) {
+      final prev = samples[i - 1];
+      final curr = samples[i];
+      if ((prev <= 0 && curr > 0) || (prev >= 0 && curr < 0)) {
+        crossings++;
+      }
+    }
+
+    return (crossings * sr) / (2.0 * samples.length);
+  }
+
+  double _goertzelPower(List<double> samples, int sr, double targetHz) {
+    final omega = 2.0 * pi * targetHz / sr;
+    final coefficient = 2.0 * cos(omega);
+
+    double q0 = 0;
+    double q1 = 0;
+    double q2 = 0;
+
+    for (int i = 0; i < samples.length; i++) {
+      final window = 0.5 - 0.5 * cos((2 * pi * i) / (samples.length - 1));
+      final sample = samples[i] * window;
+      q0 = (coefficient * q1) - q2 + sample;
+      q2 = q1;
+      q1 = q0;
+    }
+
+    return (q1 * q1) + (q2 * q2) - (coefficient * q1 * q2);
+  }
+
   void _finalizeSegment(int segmentIndex) {
     if (!_segmentNoteCounts.containsKey(segmentIndex)) return;
 
@@ -219,6 +409,7 @@ class VoiceRecorderService {
           pitch: bestNote,
           startTick: segmentIndex * _ticksPerSegment,
           durationTicks: _ticksPerSegment,
+          sourceFrequencyHz: _lastDetectedFreq,
         ),
       );
     }
@@ -320,21 +511,34 @@ class VoiceRecorderService {
   Future<List<VoiceNote>> stopRecording() async {
     if (!_isRecording) return [];
 
-    await _recorder.stopRecorder();
+    _isRecording = false;
+
+    try {
+      await _recorder.stopRecorder();
+    } catch (e) {
+      debugPrint('Ошибка остановки записи: $e');
+    }
+
     await _streamSubscription?.cancel();
     await _streamController?.close();
 
     _streamSubscription = null;
     _streamController = null;
 
+    try {
+      final session = await AudioSession.instance;
+      await session.setActive(false);
+    } catch (_) {}
+
     _finalizeSegment(_currentSegmentIndex);
     _segmentNoteCounts.clear();
 
     var notes = _mergeSegments();
-    notes = _smoothNotes(notes);
+    if (recognitionMode == VoiceRecognitionMode.melody) {
+      notes = _smoothNotes(notes);
+    }
     notes = _shiftNotesToStart(notes);
 
-    _isRecording = false;
     _lastDetectedFreq = null;
     _lastDetectedMidi = null;
 
@@ -356,6 +560,7 @@ class VoiceRecorderService {
             pitch: note.pitch,
             startTick: note.startTick - minStartTick,
             durationTicks: note.durationTicks,
+            sourceFrequencyHz: note.sourceFrequencyHz,
           ),
         )
         .toList();
@@ -375,13 +580,14 @@ class VoiceRecorderService {
           pitch: segment.pitch,
           startTick: segment.startTick,
           durationTicks: segment.durationTicks,
+          sourceFrequencyHz: segment.sourceFrequencyHz,
         );
         continue;
       }
 
       final isSamePitch = currentNote.pitch == segment.pitch;
-      final isAdjacent =
-          currentNote.startTick + currentNote.durationTicks == segment.startTick;
+      final isAdjacent = currentNote.startTick + currentNote.durationTicks ==
+          segment.startTick;
 
       if (mergeRepeatedNotes && isSamePitch && isAdjacent) {
         currentNote.durationTicks += segment.durationTicks;
@@ -391,6 +597,7 @@ class VoiceRecorderService {
           pitch: segment.pitch,
           startTick: segment.startTick,
           durationTicks: segment.durationTicks,
+          sourceFrequencyHz: segment.sourceFrequencyHz,
         );
       }
     }
@@ -411,6 +618,7 @@ class VoiceRecorderService {
             pitch: e.pitch,
             startTick: e.startTick,
             durationTicks: e.durationTicks,
+            sourceFrequencyHz: e.sourceFrequencyHz,
           ),
         )
         .toList();
@@ -422,8 +630,7 @@ class VoiceRecorderService {
 
       final currIsShort = curr.durationTicks <= 1;
       final neighborsClose = (prev.pitch - next.pitch).abs() <= 1;
-      final currLooksOutlier =
-          (curr.pitch - prev.pitch).abs() >= 3 &&
+      final currLooksOutlier = (curr.pitch - prev.pitch).abs() >= 3 &&
           (curr.pitch - next.pitch).abs() >= 3;
 
       if (currIsShort && neighborsClose && currLooksOutlier) {
@@ -435,8 +642,13 @@ class VoiceRecorderService {
   }
 
   void dispose() {
+    if (_isRecording) {
+      stopRecording();
+    }
     _streamSubscription?.cancel();
     _streamController?.close();
+    _interruptionSubscription?.cancel();
+    _becomingNoisySubscription?.cancel();
     _recorder.closeRecorder();
   }
 }
@@ -445,11 +657,13 @@ class VoiceSegment {
   final int pitch;
   final int startTick;
   final int durationTicks;
+  final double? sourceFrequencyHz;
 
   VoiceSegment({
     required this.pitch,
     required this.startTick,
     required this.durationTicks,
+    this.sourceFrequencyHz,
   });
 }
 
@@ -457,10 +671,12 @@ class VoiceNote {
   int pitch;
   int startTick;
   int durationTicks;
+  final double? sourceFrequencyHz;
 
   VoiceNote({
     required this.pitch,
     required this.startTick,
     required this.durationTicks,
+    this.sourceFrequencyHz,
   });
 }

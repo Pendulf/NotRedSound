@@ -28,13 +28,16 @@ class AudioService {
 
   FlutterMidiEngine? _midiEngine;
   Timer? _playbackTimer;
+  Future<bool>? _initializingFuture;
 
   bool _isPlaying = false;
   bool _isInitialized = false;
+  bool _isDisposed = false;
+
   int _currentTick = 0;
   int _maxTick = 0;
+  int _playbackGeneration = 0;
 
-  List<Track> _tracks = [];
   VoidCallback? _onTickCallback;
   VoidCallback? _onPlaybackFinishedCallback;
 
@@ -48,175 +51,178 @@ class AudioService {
 
   static const int _drumsChannel = 9;
 
-  final List<int> _availableMelodicChannels = [
-    0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 15];
+  static const List<int> _availableMelodicChannels = [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+  ];
 
- static const Map<String, int> instruments = {
-  // ===== КЛАВИШИ =====
-  'Пианино': 0,
-  'Яркое пианино': 1,
-  'Электропианино': 4,
+  static const Map<String, int> instruments = {
+    // ===== КЛАВИШИ =====
+    'Пианино': 0,
+    'Яркое пианино': 1,
+    'Электропианино': 4,
 
-  // ===== КОЛОКОЛЬЧИКИ =====
-  'Челеста': 8,
-  'Музыкальная шкатулка': 10,
-  'Маримба': 12,
-  'Ситар': 15,
-  'Кристалл': 98,
+    // ===== КОЛОКОЛЬЧИКИ =====
+    'Челеста': 8,
+    'Музыкальная шкатулка': 10,
+    'Маримба': 12,
+    'Ситар': 15,
+    'Кристалл': 98,
 
-  // ===== ОРГАНЫ =====
-  'Орган': 16,
-  'Перкуссионный орган': 17,
-  'Рок-орган': 18,
-  'Церковный орган': 19,
-  'Губная гармошка': 22,
+    // ===== ОРГАНЫ =====
+    'Орган': 16,
+    'Перкуссионный орган': 17,
+    'Рок-орган': 18,
+    'Церковный орган': 19,
+    'Губная гармошка': 22,
 
-  // ===== ГИТАРЫ =====
-  'Нейлоновая гитара': 24,
-  'Стальная гитара': 25,
-  'Джаз-гитара': 26,
-  'Чистая гитара': 27,
-  'Овердрайв гитара': 29,
-  'Дисторшн гитара': 30,
+    // ===== ГИТАРЫ =====
+    'Нейлоновая гитара': 24,
+    'Стальная гитара': 25,
+    'Джаз-гитара': 26,
+    'Чистая гитара': 27,
+    'Овердрайв гитара': 29,
+    'Дисторшн гитара': 30,
 
-  // ===== БАСЫ =====
-  'Акустический бас': 32,
-  'Звонкий бас': 34,
-  'Синт-бас': 38,
+    // ===== БАСЫ =====
+    'Акустический бас': 32,
+    'Звонкий бас': 34,
+    'Синт-бас': 38,
 
-  // ===== СТРУННЫЕ =====
-  'Скрипка': 40,
-  'Виолончель': 42,
-  'Приглушённые струны': 45,
-  'Струнный ансамбль': 48,
-  'Терменвокс': 110,
+    // ===== СТРУННЫЕ =====
+    'Скрипка': 40,
+    'Виолончель': 42,
+    'Приглушённые струны': 45,
+    'Струнный ансамбль': 48,
+    'Терменвокс': 110,
 
-  // ===== ХОР =====
-  'Хор "Аа"': 52,
-  'Хор "Оо"': 53,
+    // ===== ХОР =====
+    'Хор "Аа"': 52,
+    'Хор "Оо"': 53,
 
-  // ===== ДУХОВЫЕ =====
-  'Тромбон': 57,
-  'Сопрано саксофон': 64,
-  'Кларнет': 71,
-  'Флейта': 73,
-  'Пан-флейта': 75,
-  'Свист': 78,
+    // ===== ДУХОВЫЕ =====
+    'Тромбон': 57,
+    'Сопрано саксофон': 64,
+    'Кларнет': 71,
+    'Флейта': 73,
+    'Пан-флейта': 75,
+    'Свист': 78,
 
-  // ===== СИНТЕЗАТОРЫ =====
-  'Волна Квадрат': 80,
-  'Волна Пила': 86,
-  'Полисинт': 90,
-  'Моносинт': 114,
+    // ===== СИНТЕЗАТОРЫ =====
+    'Волна Квадрат': 80,
+    'Волна Пила': 86,
+    'Полисинт': 90,
+    'Моносинт': 114,
 
-  // ===== АТМОСФЕРА =====
-  'Фантазия': 88,
-  'Стеклянный смычок': 92,
-  'Метал': 93,
+    // ===== АТМОСФЕРА =====
+    'Фантазия': 88,
+    'Стеклянный смычок': 92,
+    'Метал': 93,
 
-  // ===== ПЕРКУССИЯ =====
-  'Бочка': 116,
-  'Том': 117,
-  'Бочка 2': 118,
-  'Ударные': 128,
+    // ===== ПЕРКУССИЯ =====
+    'Бочка': 116,
+    'Том': 117,
+    'Бочка 2': 118,
+    'Ударные': 128,
 
-  // ===== ЗВУКИ =====
-  'Шум ладов гитары': 120,
-  'Пение птиц': 123,
-  'Телефон': 124,
-  'Вертолёт': 125,
-  'Аплодисменты': 126,
-};
+    // ===== ЗВУКИ =====
+    'Шум ладов гитары': 120,
+    'Пение птиц': 123,
+    'Телефон': 124,
+    'Вертолёт': 125,
+    'Аплодисменты': 126,
+  };
 
-static const Map<String, List<String>> instrumentCategories = {
-
-  '🎹 Клавиши': [
-    'Пианино',
-    'Яркое пианино',
-    'Электропианино',
-  ],
-
-  '🔔 Колокольчики': [
-    'Челеста',
-    'Музыкальная шкатулка',
-    'Маримба',
-    'Ситар',
-    'Кристалл',
-  ],
-
-  '🏰 Органы': [
-    'Орган',
-    'Перкуссионный орган',
-    'Рок-орган',
-    'Церковный орган',
-    'Губная гармошка',
-  ],
-
-  '🎸 Гитары': [
-    'Нейлоновая гитара',
-    'Стальная гитара',
-    'Джаз-гитара',
-    'Чистая гитара',
-    'Овердрайв гитара',
-    'Дисторшн гитара',
-  ],
-
-  '🎸 Басы': [
-    'Акустический бас',
-    'Звонкий бас',
-    'Синт-бас',
-  ],
-
-  '🎻 Струнные': [
-    'Скрипка',
-    'Виолончель',
-    'Приглушённые струны',
-    'Струнный ансамбль',
-    'Терменвокс',
-  ],
-
-  '🗣️ Хор': [
-    'Хор "Аа"',
-    'Хор "Оо"',
-  ],
-
-  '🎷 Духовые': [
-    'Тромбон',
-    'Сопрано саксофон',
-    'Кларнет',
-    'Флейта',
-    'Пан-флейта',
-    'Свист',
-  ],
-
-  '🎹 Синтезаторы': [
-    'Квадратная волна',
-    'Пила (5-я гармоника)',
-    'Полисинт',
-    'Моносинт',
-  ],
-
-  '🌌 Атмосфера': [
-    'Фантазия',
-    'Стеклянный смычок',
-    'Метал',
-  ],
-
-  '🥁 Перкусия': [
-    'Бочка',
-    'Бочка 2',
-    'Том',
-    'Ударные',
-  ],
-
-  '🔊 FX звуки': [
-    'Шум ладов гитары',
-    'Пение птиц',
-    'Телефон',
-    'Вертолёт',
-    'Аплодисменты',
-  ],
-};
+  static const Map<String, List<String>> instrumentCategories = {
+    '🎹 Клавиши': [
+      'Пианино',
+      'Яркое пианино',
+      'Электропианино',
+    ],
+    '🔔 Колокольчики': [
+      'Челеста',
+      'Музыкальная шкатулка',
+      'Маримба',
+      'Ситар',
+      'Кристалл',
+    ],
+    '🏰 Органы': [
+      'Орган',
+      'Перкуссионный орган',
+      'Рок-орган',
+      'Церковный орган',
+      'Губная гармошка',
+    ],
+    '🎸 Гитары': [
+      'Нейлоновая гитара',
+      'Стальная гитара',
+      'Джаз-гитара',
+      'Чистая гитара',
+      'Овердрайв гитара',
+      'Дисторшн гитара',
+    ],
+    '🎸 Басы': [
+      'Акустический бас',
+      'Звонкий бас',
+      'Синт-бас',
+    ],
+    '🎻 Струнные': [
+      'Скрипка',
+      'Виолончель',
+      'Приглушённые струны',
+      'Струнный ансамбль',
+      'Терменвокс',
+    ],
+    '🗣️ Хор': [
+      'Хор "Аа"',
+      'Хор "Оо"',
+    ],
+    '🎷 Духовые': [
+      'Тромбон',
+      'Сопрано саксофон',
+      'Кларнет',
+      'Флейта',
+      'Пан-флейта',
+      'Свист',
+    ],
+    '🎹 Синтезаторы': [
+      'Волна Квадрат',
+      'Волна Пила',
+      'Полисинт',
+      'Моносинт',
+    ],
+    '🌌 Атмосфера': [
+      'Фантазия',
+      'Стеклянный смычок',
+      'Метал',
+    ],
+    '🥁 Перкуссия': [
+      'Бочка',
+      'Бочка 2',
+      'Том',
+      'Ударные',
+    ],
+    '🔊 FX звуки': [
+      'Шум ладов гитары',
+      'Пение птиц',
+      'Телефон',
+      'Вертолёт',
+      'Аплодисменты',
+    ],
+  };
 
   bool get isPlaying => _isPlaying;
   int get currentTick => _currentTick;
@@ -225,12 +231,12 @@ static const Map<String, List<String>> instrumentCategories = {
   bool _isDrumProgram(int program) => program == 128;
 
   int _resolvePlaybackProgram(int program) {
-    return _isDrumProgram(program) ? 0 : program;
+    return _isDrumProgram(program) ? 0 : program.clamp(0, 127).toInt();
   }
 
   int _allocateMelodicChannel() {
-    final channel =
-        _availableMelodicChannels[_nextChannel % _availableMelodicChannels.length];
+    final channel = _availableMelodicChannels[
+        _nextChannel % _availableMelodicChannels.length];
     _nextChannel++;
     return channel;
   }
@@ -239,45 +245,109 @@ static const Map<String, List<String>> instrumentCategories = {
     return _isDrumProgram(program) ? _drumsChannel : _allocateMelodicChannel();
   }
 
-int _velocityFromTrack(Track track, {required bool isDrums}) {
-  final baseVelocity = isDrums ? 115 : 60;
-  return (baseVelocity * track.volume).round().clamp(1, 127);
-}
+  int _velocityFromTrack(Track track, {required bool isDrums}) {
+    final baseVelocity = isDrums ? 115 : 60;
+    return (baseVelocity * track.volume).round().clamp(1, 127).toInt();
+  }
 
   Future<void> initialize() async {
+    await ensureInitialized(forceReload: true);
+  }
+
+  Future<bool> ensureInitialized({bool forceReload = false}) {
+    if (_isDisposed) {
+      _isDisposed = false;
+    }
+
+    if (!forceReload && _isInitialized && _midiEngine != null) {
+      return Future.value(true);
+    }
+
+    final pending = _initializingFuture;
+    if (pending != null) return pending;
+
+    _initializingFuture = _initializeInternal(forceReload: forceReload);
+    return _initializingFuture!.whenComplete(() {
+      _initializingFuture = null;
+    });
+  }
+
+  Future<bool> _initializeInternal({required bool forceReload}) async {
     try {
-      _midiEngine = FlutterMidiEngine();
+      if (forceReload || _midiEngine == null) {
+        try {
+          await _midiEngine?.stopAllNotes();
+          await _midiEngine?.unloadSoundfont();
+        } catch (_) {}
+
+        _midiEngine = FlutterMidiEngine();
+      }
+
       await _midiEngine?.unmute();
 
       final tempDir = await getTemporaryDirectory();
       final sf2Path = '${tempDir.path}/Arachno_SoundFont_Version_1.0.sf2';
-
       final sf2File = File(sf2Path);
-      if (!await sf2File.exists()) {
-        final byteData = await rootBundle.load('assets/sounds/Arachno_SoundFont_Version_1.0.sf2');
+
+      if (!await sf2File.exists() || await sf2File.length() == 0) {
+        final byteData = await rootBundle.load(
+          'assets/sounds/Arachno_SoundFont_Version_1.0.sf2',
+        );
         final buffer = byteData.buffer;
         await sf2File.writeAsBytes(
           buffer.asUint8List(byteData.offsetInBytes, byteData.lengthInBytes),
+          flush: true,
         );
       }
 
       final success = await _midiEngine?.loadSoundfont(sf2Path);
-      if (success == true) {
-        _isInitialized = true;
-        await _midiEngine?.setVolume(volume: 100);
-
-        for (final channel in _availableMelodicChannels) {
-          await _midiEngine?.changeProgram(program: 0, channel: channel);
-        }
+      if (success != true) {
+        _isInitialized = false;
+        return false;
       }
+
+      _isInitialized = true;
+      await _safeMidiCall(() => _midiEngine?.setVolume(volume: 100));
+
+      for (final channel in _availableMelodicChannels) {
+        await _safeMidiCall(
+          () => _midiEngine?.changeProgram(program: 0, channel: channel),
+        );
+      }
+
+      for (final entry in _trackInstruments.entries) {
+        final program = entry.value;
+        if (_isDrumProgram(program)) continue;
+        final channel = _channelForTrack(entry.key);
+        await _safeMidiCall(
+          () => _midiEngine?.changeProgram(
+            program: _resolvePlaybackProgram(program),
+            channel: channel,
+          ),
+        );
+      }
+
+      return true;
     } catch (e) {
       debugPrint('Audio init error: $e');
+      _isInitialized = false;
+      return false;
+    }
+  }
+
+  Future<T?> _safeMidiCall<T>(Future<T>? Function() action) async {
+    if (_midiEngine == null) return null;
+
+    try {
+      return await action();
+    } catch (e) {
+      debugPrint('MIDI engine error: $e');
+      _isInitialized = false;
+      return null;
     }
   }
 
   Future<void> setTrackInstrument(String trackId, String instrumentName) async {
-    if (!_isInitialized) return;
-
     final newProgram = instruments[instrumentName] ?? 0;
     final oldProgram = _trackInstruments[trackId];
     final oldWasDrums = oldProgram != null && _isDrumProgram(oldProgram);
@@ -285,16 +355,18 @@ int _velocityFromTrack(Track track, {required bool isDrums}) {
 
     _trackInstruments[trackId] = newProgram;
 
+    if (!await ensureInitialized()) return;
+
     if (_trackChannels.containsKey(trackId) && oldProgram != null) {
       if (oldWasDrums != newIsDrums) {
         final oldChannel = _trackChannels[trackId]!;
-        try {
-          await _midiEngine?.stopAllNotes();
+        await _safeMidiCall(() => _midiEngine?.stopAllNotes());
 
-          if (!oldWasDrums) {
-            await _midiEngine?.changeProgram(program: 0, channel: oldChannel);
-          }
-        } catch (_) {}
+        if (!oldWasDrums) {
+          await _safeMidiCall(
+            () => _midiEngine?.changeProgram(program: 0, channel: oldChannel),
+          );
+        }
 
         _trackChannels.remove(trackId);
       }
@@ -306,9 +378,11 @@ int _velocityFromTrack(Track track, {required bool isDrums}) {
     );
 
     if (!newIsDrums) {
-      await _midiEngine?.changeProgram(
-        program: _resolvePlaybackProgram(newProgram),
-        channel: channel,
+      await _safeMidiCall(
+        () => _midiEngine?.changeProgram(
+          program: _resolvePlaybackProgram(newProgram),
+          channel: channel,
+        ),
       );
     }
   }
@@ -323,44 +397,44 @@ int _velocityFromTrack(Track track, {required bool isDrums}) {
     return channel;
   }
 
-  Future<void> playNoteForTrack(String trackId, int pitch, {double volume = 1.0}) async {
-  if (!_isInitialized) return;
+  Future<void> playNoteForTrack(
+    String trackId,
+    int pitch, {
+    double volume = 1.0,
+  }) async {
+    if (!await ensureInitialized()) return;
 
-  final program = _trackInstruments[trackId] ?? 0;
-  final isDrums = _isDrumProgram(program);
-  final channel = _channelForTrack(trackId);
+    final program = _trackInstruments[trackId] ?? 0;
+    final isDrums = _isDrumProgram(program);
+    final channel = _channelForTrack(trackId);
+    final velocity =
+        ((isDrums ? 110 : 90) * volume).round().clamp(1, 127).toInt();
 
-  final velocity = ((isDrums ? 110 : 90) * volume).round().clamp(1, 127);
-
-  try {
     if (!isDrums) {
-      await _midiEngine?.changeProgram(
-        program: _resolvePlaybackProgram(program),
-        channel: channel,
+      await _safeMidiCall(
+        () => _midiEngine?.changeProgram(
+          program: _resolvePlaybackProgram(program),
+          channel: channel,
+        ),
       );
     }
 
-    await _midiEngine?.stopNote(note: pitch, channel: channel);
-    await _midiEngine?.playNote(
-      note: pitch,
-      velocity: velocity,
-      channel: channel,
+    await _safeMidiCall(
+        () => _midiEngine?.stopNote(note: pitch, channel: channel));
+    await _safeMidiCall(
+      () => _midiEngine?.playNote(
+        note: pitch,
+        velocity: velocity,
+        channel: channel,
+      ),
     );
-  } catch (e) {
-    debugPrint('Preview play error: $e');
   }
-}
 
   Future<void> stopNoteForTrack(String trackId, int pitch) async {
-    if (!_isInitialized) return;
-
+    if (!await ensureInitialized()) return;
     final channel = _channelForTrack(trackId);
-
-    try {
-      await _midiEngine?.stopNote(note: pitch, channel: channel);
-    } catch (e) {
-      debugPrint('Preview stop error: $e');
-    }
+    await _safeMidiCall(
+        () => _midiEngine?.stopNote(note: pitch, channel: channel));
   }
 
   void startPlayback(
@@ -369,58 +443,88 @@ int _velocityFromTrack(Track track, {required bool isDrums}) {
     VoidCallback? onTick,
     VoidCallback? onFinished,
   }) {
-    if (!_isInitialized) return;
+    final generation = ++_playbackGeneration;
 
-    stopPlayback();
-
-    _tracks = tracks.where((t) => !t.isMuted && t.notes.isNotEmpty).toList();
-    if (_tracks.isEmpty) return;
+    stopPlayback(notifyGeneration: false);
 
     _onTickCallback = onTick;
     _onPlaybackFinishedCallback = onFinished;
-    _currentTick = startTick < 0 ? 0 : startTick;
+    _currentTick = startTick.clamp(0, AppConstants.maxTicks).toInt();
 
-    _prepareEvents(_tracks, _currentTick).then((_) {
-      if (_maxTick <= 0) return;
+    final playableTracks = tracks
+        .where((track) => !track.isMuted && track.notes.isNotEmpty)
+        .map((track) => track.copyWith(notes: List<MidiNote>.from(track.notes)))
+        .toList();
 
-      _isPlaying = true;
+    if (playableTracks.isEmpty) return;
 
-      _playbackTimer = Timer.periodic(
-        Duration(milliseconds: AppConstants.millisecondsPerTick),
-        (timer) {
-          if (!_isPlaying) {
-            timer.cancel();
-            return;
-          }
+    _startPlaybackAsync(
+      playableTracks,
+      _currentTick,
+      generation,
+    );
+  }
 
-          _processTick(_currentTick);
-          _onTickCallback?.call();
-          _currentTick++;
+  Future<void> _startPlaybackAsync(
+    List<Track> tracks,
+    int startTick,
+    int generation,
+  ) async {
+    if (!await ensureInitialized()) return;
+    if (generation != _playbackGeneration) return;
 
-          if (_currentTick > _maxTick) {
-            stopPlayback();
-            _onPlaybackFinishedCallback?.call();
-          }
-        },
-      );
-    });
+    await _prepareEvents(tracks, startTick);
+    if (generation != _playbackGeneration) return;
+
+    if (_maxTick <= startTick) {
+      _finishPlayback();
+      return;
+    }
+
+    _isPlaying = true;
+    _onTickCallback?.call();
+
+    _playbackTimer = Timer.periodic(
+      Duration(
+          milliseconds:
+              AppConstants.millisecondsPerTick.clamp(1, 1000000).toInt()),
+      (timer) {
+        if (!_isPlaying || generation != _playbackGeneration) {
+          timer.cancel();
+          return;
+        }
+
+        _processTick(_currentTick);
+        _onTickCallback?.call();
+        _currentTick++;
+
+        if (_currentTick > _maxTick) {
+          _finishPlayback();
+        }
+      },
+    );
   }
 
   Future<void> _prepareEvents(List<Track> tracks, int startTick) async {
     _noteOnEvents.clear();
     _noteOffEvents.clear();
-    _maxTick = 0;
+    _maxTick = startTick;
 
     for (final track in tracks) {
-      final program = _trackInstruments[track.id] ?? 0;
+      final program =
+          _trackInstruments[track.id] ?? instruments[track.instrument] ?? 0;
+      _trackInstruments[track.id] = program;
+
       final isDrums = _isDrumProgram(program);
       final channel = _channelForTrack(track.id);
       final velocity = _velocityFromTrack(track, isDrums: isDrums);
 
       if (!isDrums) {
-        await _midiEngine?.changeProgram(
-          program: _resolvePlaybackProgram(program),
-          channel: channel,
+        await _safeMidiCall(
+          () => _midiEngine?.changeProgram(
+            program: _resolvePlaybackProgram(program),
+            channel: channel,
+          ),
         );
       }
 
@@ -430,23 +534,25 @@ int _velocityFromTrack(Track track, {required bool isDrums}) {
         final noteStartTick = note.startTick;
         final noteEndTick = note.endTick;
 
-        if (noteEndTick < startTick) continue;
+        if (noteEndTick <= startTick) continue;
 
-        _noteOnEvents.putIfAbsent(noteStartTick, () => []).add(
-          _ScheduledNoteEvent(
-            pitch: note.pitch,
-            channel: channel,
-            velocity: velocity,
-          ),
-        );
+        final onTick = noteStartTick < startTick ? startTick : noteStartTick;
+
+        _noteOnEvents.putIfAbsent(onTick, () => []).add(
+              _ScheduledNoteEvent(
+                pitch: note.pitch,
+                channel: channel,
+                velocity: velocity,
+              ),
+            );
 
         _noteOffEvents.putIfAbsent(noteEndTick, () => []).add(
-          _ScheduledNoteEvent(
-            pitch: note.pitch,
-            channel: channel,
-            velocity: velocity,
-          ),
-        );
+              _ScheduledNoteEvent(
+                pitch: note.pitch,
+                channel: channel,
+                velocity: velocity,
+              ),
+            );
 
         if (noteEndTick > _maxTick) {
           _maxTick = noteEndTick;
@@ -456,8 +562,8 @@ int _velocityFromTrack(Track track, {required bool isDrums}) {
   }
 
   void _processTick(int tick) {
-    final offEvents = _noteOffEvents[tick] ?? const [];
-    final onEvents = _noteOnEvents[tick] ?? const [];
+    final offEvents = _noteOffEvents[tick] ?? const <_ScheduledNoteEvent>[];
+    final onEvents = _noteOnEvents[tick] ?? const <_ScheduledNoteEvent>[];
 
     for (final event in offEvents) {
       _stopNoteOnChannel(event.pitch, event.channel);
@@ -469,42 +575,59 @@ int _velocityFromTrack(Track track, {required bool isDrums}) {
   }
 
   Future<void> _playNoteOnChannel(int pitch, int channel, int velocity) async {
-    try {
-      await _midiEngine?.playNote(
+    await _safeMidiCall(
+      () => _midiEngine?.playNote(
         note: pitch,
         velocity: velocity,
         channel: channel,
-      );
-    } catch (e) {
-      debugPrint('Playback play error: $e');
-    }
+      ),
+    );
   }
 
   Future<void> _stopNoteOnChannel(int pitch, int channel) async {
-    try {
-      await _midiEngine?.stopNote(note: pitch, channel: channel);
-    } catch (e) {
-      debugPrint('Playback stop error: $e');
-    }
+    await _safeMidiCall(
+        () => _midiEngine?.stopNote(note: pitch, channel: channel));
   }
 
   Future<void> _stopAllNotes() async {
-    try {
-      await _midiEngine?.stopAllNotes();
-    } catch (_) {}
+    await _safeMidiCall(() => _midiEngine?.stopAllNotes());
   }
 
-  void stopPlayback() {
+  void _finishPlayback() {
+    if (!_isPlaying) return;
+    stopPlayback();
+    _onPlaybackFinishedCallback?.call();
+  }
+
+  void stopPlayback({bool notifyGeneration = true}) {
+    if (notifyGeneration) {
+      _playbackGeneration++;
+    }
+
     _isPlaying = false;
     _playbackTimer?.cancel();
     _playbackTimer = null;
+    _noteOnEvents.clear();
+    _noteOffEvents.clear();
     _stopAllNotes();
   }
 
-  void dispose() {
+  void handleAppPaused() {
     stopPlayback();
-    _midiEngine?.stopAllNotes();
-    _midiEngine?.unloadSoundfont();
+  }
+
+  Future<void> handleAppResumed() async {
+    if (!_isInitialized || _midiEngine == null) {
+      await ensureInitialized();
+    }
+  }
+
+  void dispose() {
+    _isDisposed = true;
+    stopPlayback();
+    _safeMidiCall(() => _midiEngine?.unloadSoundfont());
     _midiEngine = null;
+    _isInitialized = false;
+    _trackChannels.clear();
   }
 }

@@ -1,20 +1,19 @@
-import 'dart:convert';
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import '../../core/constants/app_constants.dart';
-import 'package:path_provider/path_provider.dart';
-
-import '../../core/project_style.dart';
-import '../../core/project_styles.dart';
+import '../../core/styles/project_style.dart';
 import '../../core/services/audio_service.dart';
 import '../../data/models/pattern_segment.dart';
 import '../../data/models/track_model.dart';
+import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/track_repository.dart';
-import '../../domain/usecases/export_midi_usecase_impl.dart';
+import '../../data/usecases/export_midi_usecase_impl.dart';
+import '../../domain/usecases/home/home_pattern_usecases.dart';
+import '../../domain/usecases/home/home_project_usecases.dart';
+import '../../domain/usecases/home/home_track_usecases.dart';
 
 class HomeController extends ChangeNotifier {
   final TrackRepository _repository;
+  final ProjectRepository _projectRepository;
   final ExportMidiUseCaseImpl _exportMidiUseCase;
   final AudioService _audioService = AudioService();
 
@@ -26,7 +25,8 @@ class HomeController extends ChangeNotifier {
   final Map<String, PatternSegment> _savedSegments = {};
 
   HomeController(this._repository)
-      : _exportMidiUseCase = ExportMidiUseCaseImpl();
+      : _projectRepository = ProjectRepository(),
+        _exportMidiUseCase = ExportMidiUseCaseImpl();
 
   List<Track> get tracks => _repository.getTracks().cast<Track>();
   bool get isPlaying => _audioService.isPlaying;
@@ -74,55 +74,6 @@ class HomeController extends ChangeNotifier {
     }
   }
 
-  List<MidiNote> _replaceNotesInRange({
-    required List<MidiNote> sourceNotes,
-    required int rangeStart,
-    required int rangeEnd,
-    required List<MidiNote> insertingNotes,
-  }) {
-    final result = <MidiNote>[];
-
-    for (final note in sourceNotes) {
-      final intersects = note.intersectsRange(rangeStart, rangeEnd);
-
-      if (!intersects) {
-        result.add(note);
-        continue;
-      }
-
-      if (note.startTick < rangeStart) {
-        final leftDuration = rangeStart - note.startTick;
-        if (leftDuration > 0) {
-          result.add(note.copyWith(durationTicks: leftDuration));
-        }
-      }
-
-      if (note.endTick > rangeEnd) {
-        final rightStart = rangeEnd;
-        final rightDuration = note.endTick - rangeEnd;
-        if (rightDuration > 0) {
-          result.add(
-            note.copyWith(
-              startTick: rightStart,
-              durationTicks: rightDuration,
-            ),
-          );
-        }
-      }
-    }
-
-    result.addAll(insertingNotes);
-
-    result.sort((a, b) {
-      if (a.startTick != b.startTick) {
-        return a.startTick.compareTo(b.startTick);
-      }
-      return a.pitch.compareTo(b.pitch);
-    });
-
-    return result;
-  }
-
   PatternSegment? createSegmentFromBars(
     String trackId,
     int startBar,
@@ -131,45 +82,12 @@ class HomeController extends ChangeNotifier {
     final track = _findTrack(trackId);
     if (track == null) return null;
 
-    final startTick = startBar * _ticksPerBar;
-    final endTick = (startBar + barCount) * _ticksPerBar;
-
-    final notesInRange = <MidiNote>[];
-
-    for (final note in track.notes) {
-      if (!note.intersectsRange(startTick, endTick)) continue;
-
-      final clippedStart =
-          note.startTick < startTick ? startTick : note.startTick;
-      final clippedEnd = note.endTick > endTick ? endTick : note.endTick;
-      final clippedDuration = clippedEnd - clippedStart;
-
-      if (clippedDuration <= 0) continue;
-
-      notesInRange.add(
-        MidiNote(
-          pitch: note.pitch,
-          startTick: clippedStart - startTick,
-          durationTicks: clippedDuration,
-        ),
-      );
-    }
-
-    if (notesInRange.isEmpty) return null;
-
-    notesInRange.sort((a, b) {
-      if (a.startTick != b.startTick) {
-        return a.startTick.compareTo(b.startTick);
-      }
-      return a.pitch.compareTo(b.pitch);
-    });
-
-    return PatternSegment(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      name: 'Сегмент ${_savedSegments.length + 1}',
-      notes: notesInRange,
-      barLength: barCount,
-      createdAt: DateTime.now(),
+    return HomePatternUseCases.createSegmentFromBars(
+      track: track,
+      startBar: startBar,
+      barCount: barCount,
+      ticksPerBar: _ticksPerBar,
+      savedSegmentCount: _savedSegments.length,
     );
   }
 
@@ -181,16 +99,11 @@ class HomeController extends ChangeNotifier {
     final track = _findTrack(trackId);
     if (track == null) return;
 
-    final targetStart = targetBarIndex * _ticksPerBar;
-    final targetEnd = targetStart + (segment.barLength * _ticksPerBar);
-
-    final insertingNotes = segment.copyNotesToBar(targetBarIndex, _ticksPerBar);
-
-    final updatedNotes = _replaceNotesInRange(
+    final updatedNotes = HomePatternUseCases.copySegmentToBar(
       sourceNotes: track.notes,
-      rangeStart: targetStart,
-      rangeEnd: targetEnd,
-      insertingNotes: insertingNotes,
+      segment: segment,
+      targetBarIndex: targetBarIndex,
+      ticksPerBar: _ticksPerBar,
     );
 
     _repository.updateTrack(track.copyWith(notes: updatedNotes));
@@ -201,14 +114,10 @@ class HomeController extends ChangeNotifier {
     final track = _findTrack(trackId);
     if (track == null) return;
 
-    final startTick = barIndex * _ticksPerBar;
-    final endTick = startTick + _ticksPerBar;
-
-    final updatedNotes = _replaceNotesInRange(
+    final updatedNotes = HomePatternUseCases.deleteNotesInBar(
       sourceNotes: track.notes,
-      rangeStart: startTick,
-      rangeEnd: endTick,
-      insertingNotes: const [],
+      barIndex: barIndex,
+      ticksPerBar: _ticksPerBar,
     );
 
     _repository.updateTrack(track.copyWith(notes: updatedNotes));
@@ -216,18 +125,12 @@ class HomeController extends ChangeNotifier {
   }
 
   void addTrack() {
-    final currentStyle = AppConstants.currentStyle;
-    final trackIndex = tracks.length;
-
-    final newTrack = Track(
-      id: DateTime.now().microsecondsSinceEpoch.toString(),
-      name: currentStyle.defaultTrackName(trackIndex),
-      color: currentStyle.colorForTrack(trackIndex),
-      notes: [],
-      instrument: currentStyle.defaultTrackInstrument(trackIndex),
-      volume: 1.0,
+    _repository.addTrack(
+      HomeTrackUseCases.createTrack(
+        style: AppConstants.currentStyle,
+        index: tracks.length,
+      ),
     );
-    _repository.addTrack(newTrack);
     notifyListeners();
   }
 
@@ -260,8 +163,7 @@ class HomeController extends ChangeNotifier {
       _audioService.stopPlayback();
     }
 
-    AppConstants.applyProjectStyle(styleType);
-    AppConstants.resetProjectMetrics();
+    AppConstants.resetProjectMetrics(styleType: styleType);
 
     final existingIds = tracks.map((t) => t.id).toList();
     for (final id in existingIds) {
@@ -274,18 +176,8 @@ class HomeController extends ChangeNotifier {
     _playbackStartBar = 0;
 
     final style = AppConstants.currentStyle;
-    for (int i = 0; i < style.starterTracks.length; i++) {
-      final starter = style.starterTracks[i];
-      _repository.addTrack(
-        Track(
-          id: '${style.id}_${DateTime.now().microsecondsSinceEpoch}_$i',
-          name: starter.name,
-          color: style.colorForTrack(i),
-          notes: [],
-          instrument: starter.instrument,
-          volume: 1.0,
-        ),
-      );
+    for (final track in HomeTrackUseCases.createStarterTracks(style)) {
+      _repository.addTrack(track);
     }
 
     notifyListeners();
@@ -368,7 +260,7 @@ class HomeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void togglePlayback() {
+  Future<void> togglePlayback() async {
     if (_audioService.isPlaying) {
       _audioService.stopPlayback();
       notifyListeners();
@@ -384,7 +276,7 @@ class HomeController extends ChangeNotifier {
     }
 
     for (final track in tracksWithNotes) {
-      _audioService.setTrackInstrument(track.id, track.instrument);
+      await _audioService.setTrackInstrument(track.id, track.instrument);
     }
 
     final startTick = _playbackStartBar * AppConstants.ticksPerBar;
@@ -397,6 +289,13 @@ class HomeController extends ChangeNotifier {
     );
 
     notifyListeners();
+  }
+
+  void stopPlayback() {
+    if (_audioService.isPlaying) {
+      _audioService.stopPlayback();
+      notifyListeners();
+    }
   }
 
   Future<void> exportMidi({
@@ -412,61 +311,24 @@ class HomeController extends ChangeNotifier {
     );
   }
 
-  Future<File> _projectFile({ProjectStyleType? styleType}) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final resolvedType = styleType ?? AppConstants.currentStyleType;
-    final styleId = ProjectStyles.byType(resolvedType).id;
-    return File('${dir.path}/notred_project_$styleId.json');
-  }
-
   Future<void> saveProject({ProjectStyleType? styleType}) async {
     final resolvedType = styleType ?? AppConstants.currentStyleType;
-    final style = ProjectStyles.byType(resolvedType);
-    final file = await _projectFile(styleType: resolvedType);
+    final snapshot = HomeProjectUseCases.buildSnapshot(
+      styleType: resolvedType,
+      tracks: tracks,
+    );
 
-    final data = {
-      'bpm': AppConstants.bpm,
-      'totalBars': AppConstants.totalBars,
-      'beatsPerBar': AppConstants.beatsPerBar,
-      'ticksPerBeat': AppConstants.ticksPerBeat,
-      'styleId': style.id,
-      'tracks': tracks.map((t) => t.toJson()).toList(),
-    };
-
-    await file.writeAsString(jsonEncode(data));
+    await _projectRepository.save(snapshot, styleType: resolvedType);
   }
 
   Future<bool> loadProject({ProjectStyleType? styleType}) async {
-    final resolvedType = styleType ?? AppConstants.currentStyleType;
-
     try {
-      final file = await _projectFile(styleType: resolvedType);
-      if (!await file.exists()) {
-        return false;
-      }
+      final snapshot = await _projectRepository.load(styleType: styleType);
+      if (snapshot == null) return false;
 
-      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
-
-      final bpm = json['bpm'] as int? ?? AppConstants.bpm;
-      final totalBars = json['totalBars'] as int? ?? AppConstants.totalBars;
-      final beatsPerBar =
-          json['beatsPerBar'] as int? ?? AppConstants.beatsPerBar;
-      final ticksPerBeat =
-          json['ticksPerBeat'] as int? ?? AppConstants.ticksPerBeat;
-      final styleId = json['styleId'] as String?;
-
-      final loadedStyle = ProjectStyles.byId(styleId);
-      AppConstants.applyProjectStyle(loadedStyle.type);
-      AppConstants.updateBpm(bpm);
-      AppConstants.updateTotalBars(totalBars);
-      AppConstants.updateTimeSignature(
-        newBeatsPerBar: beatsPerBar,
-        newTicksPerBeat: ticksPerBeat,
-      );
-
-      final loadedTracks = (json['tracks'] as List<dynamic>? ?? [])
-          .map((e) => Track.fromJson(Map<String, dynamic>.from(e)))
-          .toList();
+      final loadedStyleType =
+          HomeProjectUseCases.applySnapshotMetrics(snapshot);
+      final loadedTracks = snapshot.tracks.whereType<Track>().toList();
 
       final existingIds = tracks.map((t) => t.id).toList();
       for (final id in existingIds) {
@@ -474,7 +336,7 @@ class HomeController extends ChangeNotifier {
       }
 
       if (loadedTracks.isEmpty) {
-        createNewProject(styleType: loadedStyle.type);
+        createNewProject(styleType: loadedStyleType);
       } else {
         for (final track in loadedTracks) {
           _repository.addTrack(track);
@@ -488,15 +350,15 @@ class HomeController extends ChangeNotifier {
       return false;
     }
   }
+
   @override
+  void dispose() {
+    if (_audioService.isPlaying) {
+      _audioService.stopPlayback();
+    }
 
-void dispose() {
-  if (_audioService.isPlaying) {
-    _audioService.stopPlayback();
+    horizontalScrollController.dispose();
+    verticalScrollController.dispose();
+    super.dispose();
   }
-
-  horizontalScrollController.dispose();
-  verticalScrollController.dispose();
-  super.dispose();
-}
 }

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../project_style.dart';
-import '../project_styles.dart';
+import '../styles/project_style.dart';
+import '../styles/project_styles.dart';
 
 class AppConstants {
   static int beatsPerBar = 4;
@@ -22,6 +22,30 @@ class AppConstants {
   static double barWidth = 160;
   static const double previewHeight = 40;
   static const double horizontalPadding = 16;
+
+  static double responsiveHorizontalPadding(double screenWidth) {
+    if (screenWidth < 360) return 10;
+    if (screenWidth < 420) return 12;
+    return horizontalPadding;
+  }
+
+  static double responsiveTrackInfoWidth(double screenWidth) {
+    return (screenWidth * 0.46).clamp(156.0, 213.0).toDouble();
+  }
+
+  static double responsiveKeyAreaWidth(double screenWidth) {
+    return (screenWidth * 0.24).clamp(74.0, keyAreaWidth).toDouble();
+  }
+
+  static double responsiveBarWidth(double screenWidth) {
+    final available = screenWidth - (responsiveTrackInfoWidth(screenWidth) + 24);
+    return (available / 2.2).clamp(56.0, 170.0).toDouble();
+  }
+
+  static void updateBarWidthForScreen(double screenWidth) {
+    barWidth = responsiveBarWidth(screenWidth);
+  }
+
 
   static const int minNote = 36;
   static const int maxNote = 84;
@@ -52,22 +76,22 @@ class AppConstants {
   ];
 
   static void applyProjectStyle(ProjectStyleType styleType) {
-  currentStyleType = styleType;
+    currentStyleType = styleType;
 
-  switch (styleType) {
-    case ProjectStyleType.classic:
-      beatsPerBar = 3;
-      ticksPerBeat = 3;
-      break;
+    switch (styleType) {
+      case ProjectStyleType.classic:
+        beatsPerBar = 3;
+        ticksPerBeat = 3;
+        break;
 
-    case ProjectStyleType.standard:
-    case ProjectStyleType.rock:
-    case ProjectStyleType.electro:
-      beatsPerBar = 4;
-      ticksPerBeat = 4;
-      break;
+      case ProjectStyleType.standard:
+      case ProjectStyleType.rock:
+      case ProjectStyleType.electro:
+        beatsPerBar = 4;
+        ticksPerBeat = 4;
+        break;
+    }
   }
-}
 
   static void updateBpm(int newBpm) {
     bpm = newBpm.clamp(40, 240);
@@ -87,11 +111,10 @@ class AppConstants {
     }
   }
 
-  static void resetProjectMetrics() {
+  static void resetProjectMetrics({ProjectStyleType? styleType}) {
     bpm = 60;
     totalBars = 20;
-    beatsPerBar = 4;
-    ticksPerBeat = 4;
+    applyProjectStyle(styleType ?? currentStyleType);
   }
 
   static void setRhythm3() {

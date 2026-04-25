@@ -77,7 +77,7 @@ class Track extends TrackEntity {
       'id': id,
       'name': name,
       'isMuted': isMuted,
-      'color': color.value,
+      'color': color.toARGB32(),
       'instrument': instrument,
       'volume': volume,
       'notes': notes.map((n) => n.toJson()).toList(),
@@ -89,7 +89,7 @@ class Track extends TrackEntity {
       id: json['id'] as String,
       name: json['name'] as String,
       isMuted: json['isMuted'] as bool? ?? false,
-      color: Color(json['color'] as int? ?? Colors.blue.value),
+      color: Color(json['color'] as int? ?? Colors.blue.toARGB32()),
       instrument: json['instrument'] as String? ?? 'Пианино',
       volume: (json['volume'] as num?)?.toDouble() ?? 1.0,
       notes: (json['notes'] as List<dynamic>? ?? [])
