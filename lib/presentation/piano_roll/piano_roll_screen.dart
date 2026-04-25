@@ -49,8 +49,6 @@ class _PianoRollScreenState extends State<PianoRollScreen>
   static const int minNote = AppConstants.minNote;
   static const int maxNote = AppConstants.maxNote;
   static const int octaveShift = 12;
-  static const double noteRadiusStart = 6.0;
-  static const double noteRadiusEnd = 6.0;
 
   int? _pendingStartTick;
   int? _pendingPitch;
@@ -101,15 +99,18 @@ class _PianoRollScreenState extends State<PianoRollScreen>
         widget.initialStartTick.clamp(0, math.max(0, maxTicks - 1));
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_timeScaleController.hasClients) return;
+      if (_timeScaleController.hasClients) {
+        final targetOffset = _recordStartTick * AppConstants.noteCellWidth;
+        final clamped = targetOffset.clamp(
+          0.0,
+          _timeScaleController.position.maxScrollExtent,
+        );
+        _timeScaleController.jumpTo(clamped);
+      }
 
-      final targetOffset = _recordStartTick * AppConstants.noteCellWidth;
-      final clamped = targetOffset.clamp(
-        0.0,
-        _timeScaleController.position.maxScrollExtent,
-      );
-
-      _timeScaleController.jumpTo(clamped);
+      if (_verticalScrollController.hasClients) {
+        _scrollToTrackNotes();
+      }
 
       if (mounted) {
         setState(() {});
@@ -121,6 +122,34 @@ class _PianoRollScreenState extends State<PianoRollScreen>
 
   void _setupTrackInstrument() {
     _audioService.setTrackInstrument(currentTrack.id, currentTrack.instrument);
+  }
+
+  void _scrollToTrackNotes() {
+    if (!_verticalScrollController.hasClients) return;
+    if (currentTrack.notes.isEmpty) return;
+
+    int highestPitch = currentTrack.notes.first.pitch;
+    int lowestPitch = currentTrack.notes.first.pitch;
+
+    for (final note in currentTrack.notes) {
+      if (note.pitch > highestPitch) highestPitch = note.pitch;
+      if (note.pitch < lowestPitch) lowestPitch = note.pitch;
+    }
+
+    final centerPitch = ((highestPitch + lowestPitch) / 2).round();
+    final targetIndex = (maxNote - centerPitch).clamp(0, maxNote - minNote);
+
+    const rowHeight = 30.0;
+    final viewportHeight = _verticalScrollController.position.viewportDimension;
+    final rawOffset =
+        (targetIndex * rowHeight) - (viewportHeight / 2) + (rowHeight / 2);
+
+    final clampedOffset = rawOffset.clamp(
+      0.0,
+      _verticalScrollController.position.maxScrollExtent,
+    );
+
+    _verticalScrollController.jumpTo(clampedOffset);
   }
 
   List<MidiNote> _cloneNotes(List<MidiNote> source) {
@@ -255,19 +284,15 @@ class _PianoRollScreenState extends State<PianoRollScreen>
     );
   }
 
-  String _currentScaleLabel() {
-    return ScaleAutotune.currentLabel();
-  }
-
   bool _isNoteStart(int midiNote, int tick) {
-    final note = _findNoteCovering(midiNote, tick);
-    return note != null && note.startTick == tick;
-  }
+  final note = _findNoteCovering(midiNote, tick);
+  return note != null && note.startTick == tick;
+}
 
-  bool _isNoteEnd(int midiNote, int tick) {
-    final note = _findNoteCovering(midiNote, tick);
-    return note != null && (note.startTick + note.durationTicks - 1) == tick;
-  }
+bool _isNoteEnd(int midiNote, int tick) {
+  final note = _findNoteCovering(midiNote, tick);
+  return note != null && (note.startTick + note.durationTicks - 1) == tick;
+}
 
   Future<void> _showScalePicker() async {
     final dialogRecorder = VoiceRecorderService();
@@ -350,14 +375,14 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                       child: Transform.rotate(
                         angle: -angle,
                         child: Container(
-                          decoration: BoxDecoration(
+                          decoration: const BoxDecoration(
                             shape: BoxShape.circle,
                             gradient: SweepGradient(
                               colors: [
-                                const Color.fromRGBO(224, 67, 54, 1),
-                                const Color.fromRGBO(33, 130, 243, 1),
-                                const Color.fromRGBO(156, 39, 156, 1),
-                                const Color.fromRGBO(224, 67, 54, 1),
+                                Color.fromRGBO(224, 67, 54, 1),
+                                Color.fromRGBO(33, 130, 243, 1),
+                                Color.fromRGBO(156, 39, 156, 1),
+                                Color.fromRGBO(224, 67, 54, 1),
                               ],
                             ),
                           ),
@@ -454,6 +479,86 @@ class _PianoRollScreenState extends State<PianoRollScreen>
     );
 
     dialogRecorder.dispose();
+  }
+
+  void _showPianoRollHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: currentTrack.color,
+            width: 2,
+          ),
+        ),
+        title: const Text(
+          'Как пользоваться Piano Roll',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _PianoHelpLine(
+                title: 'Постановка ноты',
+                text:
+                    'Первое нажатие задаёт начало ноты, второе — её длину.',
+              ),
+              SizedBox(height: 10),
+              _PianoHelpLine(
+                title: 'Удаление ноты',
+                text: 'Нажми по уже существующей ноте, чтобы удалить её.',
+              ),
+              SizedBox(height: 10),
+              _PianoHelpLine(
+                title: 'Старт воспроизведения',
+                text:
+                    'Нажимай на верхнюю тактовую ленту, чтобы выбрать, с какого места начать проигрывание.',
+              ),
+              SizedBox(height: 10),
+              _PianoHelpLine(
+                title: 'Горизонтальная навигация',
+                text:
+                    'Свайпай по верхней тактовой ленте или по сетке, чтобы двигаться по проекту.',
+              ),
+              SizedBox(height: 10),
+              _PianoHelpLine(
+                title: 'Автотюн',
+                text:
+                    'Короткое нажатие открывает выбор тональности. Долгое нажатие включает или выключает автотюн.',
+              ),
+              SizedBox(height: 10),
+              _PianoHelpLine(
+                title: 'Запись голосом',
+                text:
+                    'Кнопка микрофона записывает голос и превращает его в ноты на дорожке.',
+              ),
+              SizedBox(height: 10),
+              _PianoHelpLine(
+                title: 'Merge / Split',
+                text:
+                    'Левая нижняя кнопка объединяет одинаковые соседние ноты или делит их на короткие части.',
+              ),
+              SizedBox(height: 10),
+              _PianoHelpLine(
+                title: 'Сдвиг на октаву',
+                text:
+                    'Правая нижняя кнопка сдвигает все ноты вверх или вниз на октаву.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Понятно'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _onVoiceNotesDetected(List<VoiceNote> notes) {
@@ -957,12 +1062,12 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                 child: Container(
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    gradient: SweepGradient(
+                    gradient: const SweepGradient(
                       colors: [
-                        const Color.fromRGBO(224, 67, 54, 1),
-                        const Color.fromRGBO(33, 130, 243, 1),
-                        const Color.fromRGBO(156, 39, 156, 1),
-                        const Color.fromRGBO(224, 67, 54, 1),
+                        Color.fromRGBO(224, 67, 54, 1),
+                        Color.fromRGBO(33, 130, 243, 1),
+                        Color.fromRGBO(156, 39, 156, 1),
+                        Color.fromRGBO(224, 67, 54, 1),
                       ],
                     ),
                     boxShadow: _isRecordingVoice
@@ -1078,8 +1183,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
   Widget _buildAutotuneButton() {
     final outerColor =
         ScaleAutotune.isEnabled ? Colors.white : Colors.grey.shade500;
-    final innerColor =
-        ScaleAutotune.isEnabled ? currentTrack.color : currentTrack.color;
+    final innerColor = currentTrack.color;
 
     return GestureDetector(
       onTap: _showScalePicker,
@@ -1095,6 +1199,23 @@ class _PianoRollScreenState extends State<PianoRollScreen>
           ScaleAutotune.isEnabled ? Icons.tune : Icons.tune_outlined,
           color: outerColor,
           size: 20,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInfoButton() {
+    return SizedBox(
+      width: 30,
+      height: 30,
+      child: IconButton(
+        onPressed: _showPianoRollHelpDialog,
+        padding: EdgeInsets.zero,
+        splashRadius: 18,
+        icon: const Icon(
+          Icons.info_outline,
+          color: Color.fromARGB(255, 186, 186, 186),
+          size: 24,
         ),
       ),
     );
@@ -1155,10 +1276,9 @@ class _PianoRollScreenState extends State<PianoRollScreen>
           ),
         ],
       ),
-    );  }
+    );
+  }
 
-  
-  
   @override
   Widget build(BuildContext context) {
     final playheadTick = _audioService.currentTick;
@@ -1183,7 +1303,6 @@ class _PianoRollScreenState extends State<PianoRollScreen>
             child: Container(color: Colors.black.withValues(alpha: 0.6)),
           ),
           Scaffold(
-            
             backgroundColor: Colors.transparent,
             appBar: PreferredSize(
               preferredSize: const Size.fromHeight(86),
@@ -1228,6 +1347,8 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        _buildInfoButton(),
+                        const SizedBox(width: 8),
                         _buildAutotuneButton(),
                         const SizedBox(width: 12),
                         _buildRoundButton(
@@ -1267,10 +1388,10 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                             border: Border.all(color: Colors.amber, width: 1),
                           ),
                           child: ListView.builder(
-  padding: EdgeInsets.zero,
-  scrollDirection: Axis.horizontal,
-  controller: _timeScaleController,
-  physics: const ClampingScrollPhysics(),
+                            padding: EdgeInsets.zero,
+                            scrollDirection: Axis.horizontal,
+                            controller: _timeScaleController,
+                            physics: const ClampingScrollPhysics(),
                             itemCount: maxTicks,
                             itemBuilder: (context, index) {
                               final isBarStart = index % ticksPerBar == 0;
@@ -1380,8 +1501,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                                               constraints.maxWidth;
                                           final firstVisibleTick =
                                               (horizontalOffset /
-                                                      AppConstants
-                                                          .noteCellWidth)
+                                                      AppConstants.noteCellWidth)
                                                   .floor()
                                                   .clamp(0, maxTicks - 1);
                                           final visibleTickCount =
@@ -1401,9 +1521,13 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                                               tickIndex++) {
                                             final isNotePresent =
                                                 _isNotePresent(
-                                                    midiNote, tickIndex);
+                                              midiNote,
+                                              tickIndex,
+                                            );
                                             final isPending = _isPendingCell(
-                                                midiNote, tickIndex);
+                                              midiNote,
+                                              tickIndex,
+                                            );
 
                                             cells.add(
                                               Positioned(
@@ -1425,28 +1549,21 @@ class _PianoRollScreenState extends State<PianoRollScreen>
                                                   child: Builder(
                                                     builder: (_) {
                                                       final isStart =
-                                                          _isNoteStart(midiNote,
-                                                              tickIndex);
+                                                          _isNoteStart(
+                                                        midiNote,
+                                                        tickIndex,
+                                                      );
                                                       final isEnd = _isNoteEnd(
-                                                          midiNote, tickIndex);
+                                                        midiNote,
+                                                        tickIndex,
+                                                      );
 
                                                       const double startRadius =
                                                           7.0;
                                                       const double endRadius =
                                                           7.0;
-                                                      const double bottomInset =
-                                                          0;
-                                                      const double
-                                                          rightInsetForEnd = 0;
 
                                                       return Container(
-                                                        padding:
-                                                            EdgeInsets.only(
-                                                          bottom: bottomInset,
-                                                          right: isEnd
-                                                              ? rightInsetForEnd
-                                                              : 0,
-                                                        ),
                                                         decoration:
                                                             BoxDecoration(
                                                           border: Border(
@@ -1537,8 +1654,6 @@ class _PianoRollScreenState extends State<PianoRollScreen>
               ),
             ),
           ),
-
-          // Затемнение во время записи
           Positioned.fill(
             child: IgnorePointer(
               child: AnimatedContainer(
@@ -1562,12 +1677,47 @@ class _PianoRollScreenState extends State<PianoRollScreen>
               ),
             ),
           ),
-          // Нижняя панель поверх затемнения
           Positioned(
             left: AppConstants.horizontalPadding,
             right: AppConstants.horizontalPadding,
             bottom: 20,
             child: _buildBottomToolbar(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PianoHelpLine extends StatelessWidget {
+  final String title;
+  final String text;
+
+  const _PianoHelpLine({
+    required this.title,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$title: ',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          TextSpan(
+            text: text,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.78),
+              fontSize: 14,
+              height: 1.35,
+            ),
           ),
         ],
       ),

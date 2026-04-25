@@ -31,8 +31,13 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
+  flutter_launcher_icons: ^0.14.3
 
-
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/splash_icon.jpg"
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
@@ -42,3 +47,5 @@ flutter:
     - assets/rock_background.jpg
     - assets/background_dark.jpg
     - assets/sounds/Arachno_SoundFont_Version_1.0.sf2
+    - assets/splash_icon.png
+    - assets/splash_icon.jpg

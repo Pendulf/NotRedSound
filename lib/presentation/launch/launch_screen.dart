@@ -1,9 +1,12 @@
+
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/project_style.dart';
 import '../../core/project_styles.dart';
 import '../home/home_screen.dart';
+import '../onboarding/onboarding_screen.dart';
+import '../../core/navigation/fade_page_route.dart';
 
 class LaunchScreen extends StatelessWidget {
   const LaunchScreen({super.key});
@@ -16,41 +19,42 @@ class LaunchScreen extends StatelessWidget {
     AppConstants.applyProjectStyle(styleType);
 
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (_) => HomeScreen(
-          initialStyleType: styleType,
-          loadSavedProject: loadSavedProject,
-        ),
-      ),
-    );
+  FadePageRoute(
+    duration: const Duration(milliseconds: 700),
+    child: HomeScreen(
+      initialStyleType: styleType,
+      loadSavedProject: loadSavedProject,
+    ),
+  ),
+);
   }
 
   @override
   Widget build(BuildContext context) {
     final styles = [
       (
-        label: 'Создать проект',
-        subtitle: 'Текущая полная версия проекта',
+        label: 'Полная версия',
+        subtitle: 'Полный режим ',
         styleType: ProjectStyleType.standard,
         loadSavedProject: true,
         color: ProjectStyles.standard.primaryColor,
       ),
       (
-        label: 'Rock version',
+        label: 'Рок версия',
         subtitle: 'Гитары, бас, рок-орган, ударные',
         styleType: ProjectStyleType.rock,
         loadSavedProject: true,
         color: ProjectStyles.rock.primaryColor,
       ),
       (
-        label: 'Electro version',
+        label: 'Электро версия',
         subtitle: 'Синты, FX, электро-клавиши',
         styleType: ProjectStyleType.electro,
         loadSavedProject: true,
         color: ProjectStyles.electro.primaryColor,
       ),
       (
-        label: 'Classic version',
+        label: 'Классическая версия',
         subtitle: 'Пианино, струнные, духовые',
         styleType: ProjectStyleType.classic,
         loadSavedProject: true,
@@ -67,14 +71,45 @@ class LaunchScreen extends StatelessWidget {
             AppConstants.currentStyle.backgroundAsset,
             fit: BoxFit.cover,
           ),
-          Container(color: Colors.black.withValues(alpha: 0.72)),
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.black.withValues(alpha: 0.62),
+                  Colors.black.withValues(alpha: 0.82),
+                  Colors.black.withValues(alpha: 0.90),
+                ],
+              ),
+            ),
+          ),
           SafeArea(
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Spacer(),
+                  Align(
+                    alignment: Alignment.topRight,
+                    child: TextButton.icon(
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => const OnboardingScreen(
+                              openLaunchAfterFinish: false,
+                            ),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.help_outline_rounded),
+                      label: const Text('Как это работает'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white.withValues(alpha: 0.88),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12,),
                   Text(
                     'NotRedSound',
                     textAlign: TextAlign.center,
@@ -84,7 +119,7 @@ class LaunchScreen extends StatelessWidget {
                       letterSpacing: 1.2,
                       foreground: Paint()
                         ..shader = const LinearGradient(
-                          colors: AppConstants.nameGradient,
+                          colors: AppConstants.brandGradient,
                         ).createShader(const Rect.fromLTWH(0, 0, 260, 60)),
                     ),
                   ),
@@ -100,7 +135,7 @@ class LaunchScreen extends StatelessWidget {
                   const Spacer(),
                   ...styles.map(
                     (item) => Padding(
-                      padding: const EdgeInsets.only(bottom: 32),
+                      padding: const EdgeInsets.only(bottom: 16),
                       child: _LaunchButton(
                         title: item.label,
                         subtitle: item.subtitle,
@@ -113,6 +148,7 @@ class LaunchScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  const Spacer(),
                 ],
               ),
             ),

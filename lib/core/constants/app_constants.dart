@@ -51,15 +51,23 @@ class AppConstants {
     Colors.blue,
   ];
 
-  static const List<Color> nameGradient = [
-    Colors.white,
-    Colors.white,
-    Colors.orange,
-  ];
-
   static void applyProjectStyle(ProjectStyleType styleType) {
-    currentStyleType = styleType;
+  currentStyleType = styleType;
+
+  switch (styleType) {
+    case ProjectStyleType.classic:
+      beatsPerBar = 3;
+      ticksPerBeat = 3;
+      break;
+
+    case ProjectStyleType.standard:
+    case ProjectStyleType.rock:
+    case ProjectStyleType.electro:
+      beatsPerBar = 4;
+      ticksPerBeat = 4;
+      break;
   }
+}
 
   static void updateBpm(int newBpm) {
     bpm = newBpm.clamp(40, 240);

@@ -121,7 +121,7 @@ class ProjectStyles {
     id: 'standard',
     displayName: 'Проект',
     backgroundAsset: 'assets/background_dark.jpg',
-    primaryColor: Colors.orangeAccent,
+    primaryColor: Colors.deepOrange,
     secondaryColor: Colors.amber,
     trackPalette: _standardPalette,
     instrumentCategories: _standardCategories,
@@ -211,10 +211,10 @@ class ProjectStyles {
       ],
     },
     starterTracks: [
-      DefaultTrackTemplate(name: 'Lead', instrument: 'Полисинт'),
-      DefaultTrackTemplate(name: 'Bass', instrument: 'Синт-бас'),
-      DefaultTrackTemplate(name: 'Pad', instrument: 'Фантазия'),
-      DefaultTrackTemplate(name: 'Beat', instrument: 'Бочка'),
+      DefaultTrackTemplate(name: 'Синтезатор', instrument: 'Моносинт'),
+      DefaultTrackTemplate(name: 'Бас', instrument: 'Звонкий бас'),
+      DefaultTrackTemplate(name: 'Фон', instrument: 'Фантазия'),
+      DefaultTrackTemplate(name: 'Бит', instrument: 'Ударные'),
     ],
   );
 

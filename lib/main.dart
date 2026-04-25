@@ -1,23 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'presentation/launch/launch_screen.dart';
-import 'core/theme/app_theme.dart';
+
 import 'core/services/audio_service.dart';
+import 'core/theme/app_theme.dart';
+import 'presentation/splash/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Запрашиваем разрешения для Android
+
   if (await Permission.storage.request().isGranted) {
     debugPrint('Разрешение на storage получено');
   }
-  
-  // Инициализируем аудио сервис
+
   final audioService = AudioService();
   await audioService.initialize();
-  
-  // Разрешаем обе ориентации
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.landscapeLeft,
@@ -35,12 +33,8 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'NotRedSound',
       theme: AppTheme.darkTheme,
-      home: const LaunchScreen(),
+      home: const SplashScreen(),
       debugShowCheckedModeBanner: false,
     );
   }
 }
-
-//test
-
-

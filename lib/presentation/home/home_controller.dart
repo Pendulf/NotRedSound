@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:not_red_sound/core/constants/app_constants.dart';
+import '../../core/constants/app_constants.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../core/project_style.dart';
@@ -488,12 +488,15 @@ class HomeController extends ChangeNotifier {
       return false;
     }
   }
-
   @override
-  void dispose() {
-    _audioService.dispose();
-    horizontalScrollController.dispose();
-    verticalScrollController.dispose();
-    super.dispose();
+
+void dispose() {
+  if (_audioService.isPlaying) {
+    _audioService.stopPlayback();
   }
+
+  horizontalScrollController.dispose();
+  verticalScrollController.dispose();
+  super.dispose();
+}
 }

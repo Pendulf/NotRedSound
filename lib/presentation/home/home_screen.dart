@@ -4,13 +4,16 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/dialogs/instrument_picker_dialog.dart';
+import '../../core/navigation/fade_page_route.dart';
 import '../../core/project_style.dart';
 import '../../core/project_styles.dart';
 import '../../data/models/pattern_segment.dart';
 import '../../data/models/track_model.dart';
 import '../../data/repositories/track_repository.dart';
+import '../launch/launch_screen.dart';
 import '../piano_roll/piano_roll_screen.dart';
 import 'home_controller.dart';
+import '../piano_roll/drum_piano_roll_screen.dart';
 import 'widgets/track_row_widget.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -52,7 +55,9 @@ class _HomeScreenState extends State<HomeScreen> {
       _calculateBarWidth();
 
       if (widget.loadSavedProject) {
-        final loaded = await _controller.loadProject(styleType: widget.initialStyleType);
+        final loaded = await _controller.loadProject(
+          styleType: widget.initialStyleType,
+        );
         if (!loaded) {
           _controller.createNewProject(styleType: widget.initialStyleType);
         }
@@ -183,26 +188,37 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _openPianoRoll(Track track, {int initialBar = 0}) {
-    _controller.markAsOpened(track.id);
+  _controller.markAsOpened(track.id);
 
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PianoRollScreen(
-          track: track,
-          onTrackUpdated: (updatedTrack) {
-            _controller.updateTrack(updatedTrack);
-          },
-          bpm: AppConstants.bpm,
-          initialStartTick: initialBar * AppConstants.ticksPerBar,
-        ),
-      ),
-    ).then((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
-  }
+  final isDrumTrack = track.instrument == 'Ударные';
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => isDrumTrack
+          ? DrumPianoRollScreen(
+              track: track,
+              onTrackUpdated: (updatedTrack) {
+                _controller.updateTrack(updatedTrack);
+              },
+              bpm: AppConstants.bpm,
+              initialStartTick: initialBar * AppConstants.ticksPerBar,
+            )
+          : PianoRollScreen(
+              track: track,
+              onTrackUpdated: (updatedTrack) {
+                _controller.updateTrack(updatedTrack);
+              },
+              bpm: AppConstants.bpm,
+              initialStartTick: initialBar * AppConstants.ticksPerBar,
+            ),
+    ),
+  ).then((_) {
+    if (mounted) {
+      setState(() {});
+    }
+  });
+}
 
   void _onBarLongPress(Track track, int barIndex) {
     final segment = _controller.createSegmentFromBars(track.id, barIndex, 1);
@@ -266,67 +282,94 @@ class _HomeScreenState extends State<HomeScreen> {
     return ((value / 5).round() * 5).clamp(40, 240);
   }
 
-
-  Future<void> _showStyleSelector({
-    required ProjectStyleType selectedType,
-    required ValueChanged<ProjectStyleType> onSelected,
-  }) async {
-    await showModalBottomSheet<void>(
+  void _showHomeHelpDialog() {
+    showDialog(
       context: context,
-      backgroundColor: Colors.grey[900],
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: AppConstants.styleColor,
+            width: 1.2,
+          ),
+        ),
+        title: const Text(
+          'Как пользоваться Home',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: const SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _HomeHelpLine(
+                title: 'Добавить дорожку',
+                text:
+                    'Нажми кнопку "Добавить дорожку", чтобы создать новый инструмент.',
+              ),
+              SizedBox(height: 10),
+              _HomeHelpLine(
+                title: 'Открыть Piano Roll',
+                text:
+                    'Нажми на превью дорожки или на нужный такт, чтобы перейти в редактор нот.',
+              ),
+              SizedBox(height: 10),
+              _HomeHelpLine(
+                title: 'Старт воспроизведения',
+                text:
+                    'Нажимай на номера тактов сверху, чтобы выбрать, с какого такта начать проигрывание.',
+              ),
+              SizedBox(height: 10),
+              _HomeHelpLine(
+                title: 'Копирование / удаление такта',
+                text:
+                    'Зажми такт, чтобы выделить сегмент. Потом нажми на такт этой же дорожки: в пустой такт сегмент вставится, в заполненном такте ноты удалятся.',
+              ),
+              SizedBox(height: 10),
+              _HomeHelpLine(
+                title: 'Mute / Solo',
+                text:
+                    'Короткое нажатие на mute выключает дорожку. Долгое нажатие оставляет играть только её.',
+              ),
+              SizedBox(height: 10),
+              _HomeHelpLine(
+                title: 'Проект',
+                text:
+                    'Кнопка меню проекта открывает настройки: стиль, BPM, количество тактов, размер, сохранение, экспорт и очистку нот.',
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Понятно'),
+          ),
+        ],
       ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: ProjectStyles.all.map((style) {
-                final isSelected = style.type == selectedType;
+    );
+  }
 
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: ListTile(
-                    onTap: () {
-                      Navigator.pop(context);
-                      onSelected(style.type);
-                    },
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(
-                        color: isSelected
-                            ? style.primaryColor
-                            : Colors.white.withValues(alpha: 0.08),
-                      ),
-                    ),
-                    tileColor: Colors.white.withValues(alpha: 0.03),
-                    leading: CircleAvatar(
-                      backgroundColor: style.primaryColor,
-                      child: isSelected
-                          ? const Icon(Icons.check, color: Colors.white)
-                          : null,
-                    ),
-                    title: Text(
-                      style.displayName,
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                    subtitle: Text(
-                      style.type == ProjectStyleType.standard
-                          ? 'Полный режим проекта'
-                          : 'Сменить фон, цвет и набор инструментов',
-                      style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.65),
-                      ),
-                    ),
-                  ),
-                );
-              }).toList(),
+  Widget _buildInfoButton() {
+    return Container(
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(18),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(18),
+          onTap: _showHomeHelpDialog,
+          child: SizedBox(
+            width: 30,
+            height: 30,
+            child: Icon(
+              Icons.info_outline,
+              color: Colors.white.withValues(alpha: 0.65),
+              size: 24,
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -391,14 +434,10 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               title: InkWell(
                 borderRadius: BorderRadius.circular(12),
-                onTap: () => _showStyleSelector(
-                  selectedType: tempStyleType,
-                  onSelected: (styleType) {
-                    setLocalState(() {
-                      tempStyleType = styleType;
-                    });
-                  },
-                ),
+                onTap: () {
+                  Navigator.pop(context);
+                  _openLaunchScreen();
+                },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 4),
                   child: Column(
@@ -641,7 +680,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     setState(() {});
                   },
                   style: ElevatedButton.styleFrom(
-                      backgroundColor: AppConstants.styleColor),
+                    backgroundColor: AppConstants.styleColor,
+                  ),
                   child: const Text('Применить'),
                 ),
               ],
@@ -662,11 +702,11 @@ class _HomeScreenState extends State<HomeScreen> {
           side: const BorderSide(color: Colors.red, width: 1.2),
         ),
         title: const Text(
-          'Удалить текущий проект',
+          'Очистить текущий проект',
           style: TextStyle(color: Colors.white),
         ),
         content: const Text(
-          'Все дорожки текущего проекта будут удалены. Продолжить?',
+          'Все ноты в текущих дорожках будут удалены, но сами дорожки сохранятся. Продолжить?',
           style: TextStyle(color: Colors.white70),
         ),
         actions: [
@@ -680,7 +720,7 @@ class _HomeScreenState extends State<HomeScreen> {
               _deleteCurrentProject();
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Удалить'),
+            child: const Text('Очистить'),
           ),
         ],
       ),
@@ -690,13 +730,25 @@ class _HomeScreenState extends State<HomeScreen> {
   void _deleteCurrentProject() {
     _pushHistory();
 
-    final repoTracks = _repository.getTracks().cast<Track>();
-    repoTracks.clear();
+    if (_controller.isPlaying) {
+      _controller.togglePlayback();
+    }
+
+    final repoTracks = List<Track>.from(_repository.getTracks().cast<Track>());
+
+    for (final track in repoTracks) {
+      _controller.updateTrack(
+        track.copyWith(
+          notes: [],
+        ),
+      );
+    }
 
     _clearSelectedSegment();
 
+    _saveProject();
     setState(() {});
-    _showSnackBar('Текущий проект удалён', Colors.red);
+    _showSnackBar('Содержимое проекта очищено', Colors.red);
   }
 
   Future<void> _saveProject() async {
@@ -894,7 +946,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Stack(
         alignment: Alignment.centerLeft,
         children: [
-          // Новое анимируемое свечение за надписью
           IgnorePointer(
             child: AnimatedScale(
               scale: _controller.isPlaying ? (_titlePulseOn ? 1.22 : 1.0) : 1.0,
@@ -951,8 +1002,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
           ),
-
-          // Сама надпись больше не масштабируется
           ShaderMask(
             shaderCallback: (bounds) => const LinearGradient(
               colors: AppConstants.brandGradient,
@@ -1038,7 +1087,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     gradient: LinearGradient(
                       colors: [
                         const Color.fromARGB(255, 123, 36, 29)
-                            .withValues(alpha: 0.60), // прозрачность градиента
+                            .withValues(alpha: 0.60),
                         const Color.fromARGB(255, 109, 29, 123)
                             .withValues(alpha: 0.60),
                         const Color.fromARGB(255, 19, 112, 175)
@@ -1067,6 +1116,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: _buildAnimatedTitle(),
                         ),
                       ),
+                      _buildInfoButton(),
+                      const SizedBox(width: 10),
                       Container(
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(22),
@@ -1190,46 +1241,46 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                               ),
                               child: ListView.builder(
-  padding: EdgeInsets.zero,
-  scrollDirection: Axis.horizontal,
-  controller: _controller.horizontalScrollController,
-  physics: const ClampingScrollPhysics(),
-  itemCount: AppConstants.maxBars,
-  itemBuilder: (context, index) {
-    final isSelected = selectedBar == index;
+                                padding: EdgeInsets.zero,
+                                scrollDirection: Axis.horizontal,
+                                controller: _controller.horizontalScrollController,
+                                physics: const ClampingScrollPhysics(),
+                                itemCount: AppConstants.maxBars,
+                                itemBuilder: (context, index) {
+                                  final isSelected = selectedBar == index;
 
-    return GestureDetector(
-      behavior: HitTestBehavior.opaque,
-      onTap: () => _controller.setPlaybackStartBar(index),
-      child: Container(
-        width: AppConstants.barWidth,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
-          color: isSelected
-              ? Colors.amber.withValues(alpha: 0.18)
-              : Colors.transparent,
-          border: Border(
-            
-            right: BorderSide(
-              color: index == AppConstants.maxBars - 1
-                  ? Colors.transparent
-                  : Colors.amber,
-              width: 2,
-            ),
-          ),
-        ),
-        child: Text(
-          '${index + 1}',
-          style: const TextStyle(
-            color: Colors.amber,
-            fontSize: 14,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-      ),
-    );
-  },
-),
+                                  return GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () =>
+                                        _controller.setPlaybackStartBar(index),
+                                    child: Container(
+                                      width: AppConstants.barWidth,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? Colors.amber.withValues(alpha: 0.18)
+                                            : Colors.transparent,
+                                        border: Border(
+                                          right: BorderSide(
+                                            color: index == AppConstants.maxBars - 1
+                                                ? Colors.transparent
+                                                : Colors.amber,
+                                            width: 2,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        '${index + 1}',
+                                        style: const TextStyle(
+                                          color: Colors.amber,
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                             _buildPlayheadHeaderOverlay(),
                           ],
@@ -1250,8 +1301,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             child: Scrollbar(
                               controller: _controller.verticalScrollController,
                               child: ListView.builder(
-                                controller:
-                                    _controller.verticalScrollController,
+                                controller: _controller.verticalScrollController,
                                 padding: EdgeInsets.zero,
                                 itemCount: _controller.tracks.length,
                                 itemBuilder: (context, index) {
@@ -1277,8 +1327,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                         _controller.soloOrResetMute(track.id);
                                         setState(() {});
                                       },
-                                      onEditPressed: () =>
-                                          _openPianoRoll(track),
+                                      onEditPressed: () => _openPianoRoll(track),
                                       onDeletePressed: () {
                                         _pushHistory();
                                         _controller.deleteTrack(track.id);
@@ -1286,8 +1335,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                       },
                                       onRename: (newName) {
                                         _pushHistory();
-                                        _controller.renameTrack(
-                                            track.id, newName);
+                                        _controller.renameTrack(track.id, newName);
                                         setState(() {});
                                       },
                                       onInstrumentChange: (instrument) {
@@ -1306,8 +1354,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                         );
                                         setState(() {});
                                       },
-                                      horizontalScrollController: _controller
-                                          .horizontalScrollController,
+                                      horizontalScrollController:
+                                          _controller.horizontalScrollController,
                                       getNotesInBar: _getNotesInBar,
                                       getNoteRange: _getNoteRange,
                                       currentSegment: trackSegment,
@@ -1348,8 +1396,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   decoration: BoxDecoration(
                     boxShadow: [
                       BoxShadow(
-                          blurRadius: 50,
-                          color: AppConstants.styleColor.withAlpha(50)),
+                        blurRadius: 50,
+                        color: AppConstants.styleColor.withAlpha(50),
+                      ),
                     ],
                   ),
                   child: Row(
@@ -1386,10 +1435,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: IconButton(
                           onPressed: () {
                             if (_controller.tracks.isEmpty) {
-                              _showSnackBar(
-                                'Добавьте дорожку',
-                                Colors.orange,
-                              );
+                              _showSnackBar('Добавьте дорожку', Colors.orange);
                               return;
                             }
 
@@ -1397,10 +1443,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 .any((t) => t.notes.isNotEmpty);
 
                             if (!hasNotes) {
-                              _showSnackBar(
-                                'Добавьте ноты',
-                                Colors.orange,
-                              );
+                              _showSnackBar('Добавьте ноты', Colors.orange);
                               return;
                             }
 
@@ -1504,6 +1547,51 @@ class _HomeScreenState extends State<HomeScreen> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(30),
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _openLaunchScreen() {
+    Navigator.of(context).pushReplacement(
+      FadePageRoute(
+        duration: const Duration(milliseconds: 800),
+        child: const LaunchScreen(),
+      ),
+    );
+  }
+}
+
+class _HomeHelpLine extends StatelessWidget {
+  final String title;
+  final String text;
+
+  const _HomeHelpLine({
+    required this.title,
+    required this.text,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return RichText(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: '$title: ',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+          ),
+          TextSpan(
+            text: text,
+            style: TextStyle(
+              color: Colors.white.withValues(alpha: 0.78),
+              fontSize: 14,
+              height: 1.35,
             ),
           ),
         ],
