@@ -50,6 +50,9 @@ class _PianoRollScreenState extends State<PianoRollScreen>
   late ScrollController _verticalScrollController;
   late AnimationController _micBorderRotationController;
 
+  final ValueNotifier<double> _horizontalOffsetNotifier =
+      ValueNotifier<double>(0.0);
+
   late int maxTicks;
   late int ticksPerBeat;
   late int beatsPerBar;
@@ -62,6 +65,9 @@ class _PianoRollScreenState extends State<PianoRollScreen>
   int? _pendingStartTick;
   int? _pendingPitch;
   int _recordStartTick = 0;
+
+  int? _selectionStartTick;
+  int? _selectionEndTick;
 
   Timer? _nrPulseTimer;
   bool _nrPulseOn = false;
@@ -92,9 +98,8 @@ class _PianoRollScreenState extends State<PianoRollScreen>
     );
 
     _timeScaleController.addListener(() {
-      if (mounted) {
-        setState(() {});
-      }
+      if (!_timeScaleController.hasClients) return;
+      _horizontalOffsetNotifier.value = _timeScaleController.offset;
     });
 
     _voiceRecorder = VoiceRecorderService();
@@ -114,6 +119,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
           _timeScaleController.position.maxScrollExtent,
         );
         _timeScaleController.jumpTo(clamped);
+        _horizontalOffsetNotifier.value = clamped.toDouble();
       }
 
       if (_verticalScrollController.hasClients) {
@@ -258,6 +264,7 @@ class _PianoRollScreenState extends State<PianoRollScreen>
     PianoRollScreenLogic(this)._stopNrMetronome();
     _timeScaleController.dispose();
     _verticalScrollController.dispose();
+    _horizontalOffsetNotifier.dispose();
     _micBorderRotationController.dispose();
 
     _audioService.stopPlayback();

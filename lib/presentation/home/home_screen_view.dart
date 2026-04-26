@@ -42,26 +42,31 @@ extension HomeScreenLogic on _HomeScreenState {
   }
 
   void _openPianoRoll(Track track, {int initialBar = 0}) {
-    _controller.markAsOpened(track.id);
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PianoRollScreen(
-          track: track,
-          onTrackUpdated: (updatedTrack) {
-            _controller.updateTrack(updatedTrack);
-          },
-          bpm: AppConstants.bpm,
-          initialStartTick: initialBar * AppConstants.ticksPerBar,
-        ),
-      ),
-    ).then((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+  if (_controller.isPlaying) {
+    _controller.stopPlayback();
+    _stopTitlePulse();
   }
+
+  _controller.markAsOpened(track.id);
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => PianoRollScreen(
+        track: track,
+        onTrackUpdated: (updatedTrack) {
+          _controller.updateTrack(updatedTrack);
+        },
+        bpm: AppConstants.bpm,
+        initialStartTick: initialBar * AppConstants.ticksPerBar,
+      ),
+    ),
+  ).then((_) {
+    if (mounted) {
+      setState(() {});
+    }
+  });
+}
 
   void _onBarLongPress(Track track, int barIndex) {
     final segment = _controller.createSegmentFromBars(track.id, barIndex, 1);
@@ -447,6 +452,7 @@ extension HomeScreenLogic on _HomeScreenState {
                         'Отправить проект',
                         style: TextStyle(color: Colors.white),
                       ),
+                      
                       onTap: () async {
                         await _controller.switchProjectStyle(tempStyleType);
                         AppConstants.updateBpm(tempBpm);
@@ -458,7 +464,11 @@ extension HomeScreenLogic on _HomeScreenState {
                         _calculateBarWidth();
                         Navigator.pop(context);
                         setState(() {});
-                        _exportToMidi(share: true);
+
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) return;
+                          _showExportFormatDialog();
+                        });
                       },
                     ),
                     ListTile(
@@ -505,6 +515,76 @@ extension HomeScreenLogic on _HomeScreenState {
           },
         );
       },
+    );
+  }
+
+  void _showExportFormatDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.grey[850],
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(
+            color: AppConstants.styleColor,
+            width: 1.2,
+          ),
+        ),
+        title: const Text(
+          'Отправить проект',
+          style: TextStyle(color: Colors.white),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.library_music, color: Colors.amber),
+              title: const Text(
+                'MIDI',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              subtitle: const Text(
+                'Для доработки в FL Studio, GarageBand и других DAW',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _exportToMidi(share: true);
+              },
+            ),
+            const Divider(color: Colors.white24),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.audiotrack, color: Colors.lightBlue),
+              title: const Text(
+                'WAV',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              subtitle: const Text(
+                'Готовый аудиофайл только для отправки',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              onTap: () {
+                Navigator.pop(context);
+                _exportToWav();
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -618,6 +698,48 @@ extension HomeScreenLogic on _HomeScreenState {
       if (!mounted) return;
       Navigator.pop(context);
       _showSnackBar('Ошибка: $e', Colors.red);
+    }
+  }
+
+  Future<void> _exportToWav() async {
+    if (_controller.tracks.isEmpty) {
+      _showSnackBar('Нет дорожек для WAV экспорта', Colors.red);
+      return;
+    }
+
+    final hasPlayableNotes = _controller.tracks.any(
+      (track) => !track.isMuted && track.notes.isNotEmpty,
+    );
+
+    if (!hasPlayableNotes) {
+      _showSnackBar('Нет активных дорожек с нотами', Colors.orange);
+      return;
+    }
+
+    final fileName = _controller.tracks.length == 1
+        ? '${_controller.tracks.first.name}.wav'
+        : 'NotRedSound_${DateTime.now().millisecondsSinceEpoch}.wav';
+
+    _showLoadingDialog();
+
+    try {
+      await _controller.exportWav(
+        fileName: fileName,
+        bpm: AppConstants.bpm,
+      );
+
+      if (!mounted) return;
+      Navigator.pop(context);
+
+      _showSnackBar(
+        'WAV файл отправлен',
+        Colors.green,
+        duration: const Duration(seconds: 2),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      Navigator.pop(context);
+      _showSnackBar('Ошибка WAV экспорта: $e', Colors.red);
     }
   }
 

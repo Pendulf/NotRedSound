@@ -14,8 +14,7 @@ Future<void> main() async {
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
-    DeviceOrientation.landscapeLeft,
-    DeviceOrientation.landscapeRight,
+
   ]);
 
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
@@ -32,7 +31,7 @@ Future<void> _warmUpAppServices() async {
       debugPrint('Storage permission: $storageStatus');
     }
 
-    await AudioService().ensureInitialized();
+    
   } catch (e) {
     debugPrint('Startup warm-up error: $e');
   }

@@ -32,18 +32,11 @@ class LaunchScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final styles = [
       (
-        label: 'Полная версия',
-        subtitle: 'Полный режим',
-        styleType: ProjectStyleType.standard,
+        label: 'Классическая версия',
+        subtitle: 'Пианино, струнные, духовые',
+        styleType: ProjectStyleType.classic,
         loadSavedProject: true,
-        color: ProjectStyles.standard.primaryColor,
-      ),
-      (
-        label: 'Рок версия',
-        subtitle: 'Гитары, бас, рок-орган, ударные',
-        styleType: ProjectStyleType.rock,
-        loadSavedProject: true,
-        color: ProjectStyles.rock.primaryColor,
+        color: ProjectStyles.classic.primaryColor,
       ),
       (
         label: 'Электро версия',
@@ -53,11 +46,20 @@ class LaunchScreen extends StatelessWidget {
         color: ProjectStyles.electro.primaryColor,
       ),
       (
-        label: 'Классическая версия',
-        subtitle: 'Пианино, струнные, духовые',
-        styleType: ProjectStyleType.classic,
+        label: 'Рок версия',
+        subtitle: 'Гитары, бас, рок-орган, ударные',
+        styleType: ProjectStyleType.rock,
         loadSavedProject: true,
-        color: ProjectStyles.classic.primaryColor,
+        color: ProjectStyles.rock.primaryColor,
+      ),
+      
+      
+      (
+        label: 'Полная версия',
+        subtitle: 'Полный режим',
+        styleType: ProjectStyleType.standard,
+        loadSavedProject: true,
+        color: ProjectStyles.standard.primaryColor,
       ),
     ];
 

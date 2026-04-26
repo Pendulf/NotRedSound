@@ -119,7 +119,7 @@ class ProjectStyles {
   static const ProjectStyle standard = ProjectStyle(
     type: ProjectStyleType.standard,
     id: 'standard',
-    displayName: 'Проект',
+    displayName: 'Свой',
     backgroundAsset: 'assets/background_dark.jpg',
     primaryColor: Colors.deepOrange,
     secondaryColor: Colors.amber,
@@ -131,7 +131,7 @@ class ProjectStyles {
   static const ProjectStyle rock = ProjectStyle(
     type: ProjectStyleType.rock,
     id: 'rock',
-    displayName: 'Rock',
+    displayName: 'Рок',
     backgroundAsset: 'assets/rock_background.jpg',
     primaryColor: Colors.red,
     secondaryColor: Colors.orange,
@@ -174,7 +174,7 @@ class ProjectStyles {
   static const ProjectStyle electro = ProjectStyle(
     type: ProjectStyleType.electro,
     id: 'electro',
-    displayName: 'Electro',
+    displayName: 'Электро',
     backgroundAsset: 'assets/electro_background.jpg',
     primaryColor: Colors.deepPurple,
     secondaryColor: Color(0xFFB388FF),
@@ -217,7 +217,7 @@ class ProjectStyles {
   static const ProjectStyle classic = ProjectStyle(
     type: ProjectStyleType.classic,
     id: 'classic',
-    displayName: 'Classic',
+    displayName: 'Классический',
     backgroundAsset: 'assets/background.jpg',
     primaryColor: Colors.indigo,
     secondaryColor: Color(0xFF9FA8DA),

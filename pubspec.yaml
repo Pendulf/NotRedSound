@@ -47,5 +47,6 @@ flutter:
     - assets/rock_background.jpg
     - assets/background_dark.jpg
     - assets/sounds/Arachno_SoundFont_Version_1.0.sf2
+    - assets/presets/notred_project_classic.json
     - assets/splash_icon.png
     - assets/splash_icon.jpg

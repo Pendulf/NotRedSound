@@ -397,27 +397,123 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
     });
   }
 
+  int? get _selectionRangeStartTick {
+    if (_selectionStartTick == null || _selectionEndTick == null) return null;
+    return math.min(_selectionStartTick!, _selectionEndTick!)
+        .clamp(0, maxTicks)
+        .toInt();
+  }
+
+  int? get _selectionRangeEndTick {
+    if (_selectionStartTick == null || _selectionEndTick == null) return null;
+    return (math.max(_selectionStartTick!, _selectionEndTick!) + 1)
+        .clamp(0, maxTicks)
+        .toInt();
+  }
+
+  bool get _hasDraftSelection =>
+      _selectionStartTick != null && _selectionEndTick == null;
+
+  bool get _hasActiveSelection =>
+      _selectionStartTick != null && _selectionEndTick != null;
+
+  bool _isTickInDraftSelection(int tick) {
+    return _hasDraftSelection && _selectionStartTick == tick;
+  }
+
+  bool _isTickInActiveSelection(int tick) {
+    final rangeStart = _selectionRangeStartTick;
+    final rangeEnd = _selectionRangeEndTick;
+    if (rangeStart == null || rangeEnd == null) return false;
+    return tick >= rangeStart && tick < rangeEnd;
+  }
+
+  bool _isBarStartInSelection(int barStartTick) {
+    return _isTickInDraftSelection(barStartTick) ||
+        _isTickInActiveSelection(barStartTick);
+  }
+
+  bool _isNoteInActiveSelection(MidiNote note) {
+    final rangeStart = _selectionRangeStartTick;
+    final rangeEnd = _selectionRangeEndTick;
+    if (rangeStart == null || rangeEnd == null) return false;
+    return note.intersectsRange(rangeStart, rangeEnd);
+  }
+
+  List<MidiNote> _selectedNotes() {
+    if (!_hasActiveSelection) return [];
+    return currentTrack.notes.where(_isNoteInActiveSelection).toList();
+  }
+
+  void _clearNoteSelection() {
+    _selectionStartTick = null;
+    _selectionEndTick = null;
+  }
+
+  void _beginNoteSelectionFromTick(int tick) {
+    if (_isPlaying) return;
+
+    setState(() {
+      _selectionStartTick = tick.clamp(0, maxTicks - 1).toInt();
+      _selectionEndTick = null;
+      _clearPendingSelection();
+    });
+  }
+
+  void _handleTimeScaleTap(int tick) {
+    if (_isPlaying) return;
+
+    if (_hasDraftSelection) {
+      setState(() {
+        _selectionEndTick = tick.clamp(0, maxTicks - 1).toInt();
+        _clearPendingSelection();
+      });
+      return;
+    }
+
+    _setRecordStartTick(tick);
+  }
+
   void _shiftAllNotesByOctave() {
     if (_isPlaying || !_hasNotes) return;
 
     final shift = _octaveShiftUpMode
         ? _PianoRollScreenState.octaveShift
         : -_PianoRollScreenState.octaveShift;
-    final shiftedNotes = PianoRollVoiceUseCases.transposeBatch(
-      batch: currentTrack.notes,
+    final targetNotes = _hasActiveSelection ? _selectedNotes() : currentTrack.notes;
+    if (targetNotes.isEmpty) return;
+
+    final shiftedTargetNotes = PianoRollVoiceUseCases.transposeBatch(
+      batch: targetNotes,
       semitones: shift,
       minNote: _PianoRollScreenState.minNote,
       maxNote: _PianoRollScreenState.maxNote,
     );
 
-    final hasClampedNote = currentTrack.notes.asMap().entries.any((entry) {
-      return shiftedNotes[entry.key].pitch != entry.value.pitch + shift;
+    final hasClampedNote = targetNotes.asMap().entries.any((entry) {
+      return shiftedTargetNotes[entry.key].pitch != entry.value.pitch + shift;
     });
     if (hasClampedNote) return;
 
     setState(() {
       _pushHistory();
-      currentTrack = currentTrack.copyWith(notes: shiftedNotes);
+
+      if (_hasActiveSelection) {
+        var selectedIndex = 0;
+        final shiftedNotes = currentTrack.notes.map((note) {
+          if (_isNoteInActiveSelection(note)) {
+            final shifted = shiftedTargetNotes[selectedIndex];
+            selectedIndex++;
+            return shifted;
+          }
+          return note;
+        }).toList();
+
+        currentTrack = currentTrack.copyWith(notes: shiftedNotes);
+      } else {
+        currentTrack = currentTrack.copyWith(notes: shiftedTargetNotes);
+      }
+
       _commitTrackUpdate(clearPending: true);
     });
   }
@@ -429,12 +525,29 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
   void _mergeAdjacentSameNotes() {
     if (_isPlaying || currentTrack.notes.isEmpty) return;
 
+    final targetNotes = _hasActiveSelection ? _selectedNotes() : currentTrack.notes;
+    if (targetNotes.isEmpty) return;
+
     setState(() {
       _pushHistory();
 
-      final mergedNotes = _mergeAllAdjacentSameNotes(currentTrack.notes);
+      final mergedTargetNotes = _mergeAllAdjacentSameNotes(targetNotes);
 
-      currentTrack = currentTrack.copyWith(notes: mergedNotes);
+      if (_hasActiveSelection) {
+        final untouchedNotes = currentTrack.notes
+            .where((note) => !_isNoteInActiveSelection(note))
+            .toList();
+
+        currentTrack = currentTrack.copyWith(
+          notes: [
+            ...untouchedNotes,
+            ...mergedTargetNotes,
+          ],
+        );
+      } else {
+        currentTrack = currentTrack.copyWith(notes: mergedTargetNotes);
+      }
+
       _commitTrackUpdate(clearPending: true);
     });
   }
@@ -446,12 +559,30 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
   void _splitAllNotesToSixteenth() {
     if (_isPlaying || currentTrack.notes.isEmpty) return;
 
+    final targetNotes = _hasActiveSelection ? _selectedNotes() : currentTrack.notes;
+    if (targetNotes.isEmpty) return;
+
     setState(() {
       _pushHistory();
 
-      final splitNotes =
-          PianoRollEditUseCases.splitNotesToGrid(currentTrack.notes);
-      currentTrack = currentTrack.copyWith(notes: splitNotes);
+      final splitTargetNotes =
+          PianoRollEditUseCases.splitNotesToGrid(targetNotes);
+
+      if (_hasActiveSelection) {
+        final untouchedNotes = currentTrack.notes
+            .where((note) => !_isNoteInActiveSelection(note))
+            .toList();
+
+        currentTrack = currentTrack.copyWith(
+          notes: [
+            ...untouchedNotes,
+            ...splitTargetNotes,
+          ],
+        );
+      } else {
+        currentTrack = currentTrack.copyWith(notes: splitTargetNotes);
+      }
+
       _commitTrackUpdate(clearPending: true);
     });
   }
@@ -520,6 +651,7 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
         (_timeScaleController.offset - details.delta.dx).clamp(0.0, maxExtent);
 
     _timeScaleController.jumpTo(newOffset);
+    _horizontalOffsetNotifier.value = newOffset.toDouble();
   }
 
   MidiNote? _findNoteCovering(int midiNote, int tick) {
@@ -563,6 +695,14 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
 
   void _handleTap(int midiNote, int tick) {
     if (_isPlaying) return;
+
+    if (_hasDraftSelection || _hasActiveSelection) {
+      setState(() {
+        _clearNoteSelection();
+        _clearPendingSelection();
+      });
+      return;
+    }
 
     setState(() {
       final existingNote = _findNoteCovering(midiNote, tick);
@@ -608,6 +748,31 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
 
   void _clearAllNotes() {
     if (_isPlaying || currentTrack.notes.isEmpty) return;
+
+    if (_hasDraftSelection) {
+      setState(() {
+        _clearNoteSelection();
+        _clearPendingSelection();
+      });
+      return;
+    }
+
+    if (_hasActiveSelection) {
+      final selectedNotes = _selectedNotes();
+      if (selectedNotes.isEmpty) return;
+
+      setState(() {
+        _pushHistory();
+        currentTrack = currentTrack.copyWith(
+          notes: currentTrack.notes
+              .where((note) => !_isNoteInActiveSelection(note))
+              .toList(),
+        );
+        _clearNoteSelection();
+        _commitTrackUpdate(clearPending: true);
+      });
+      return;
+    }
 
     showDialog(
       context: context,
@@ -992,8 +1157,6 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
 
   Widget buildPianoRollScreenContent(BuildContext context) {
     final playheadTick = _audioService.currentTick;
-    final horizontalOffset =
-        _timeScaleController.hasClients ? _timeScaleController.offset : 0.0;
     final notesEnabled = _hasNotes && !_isRecordingVoice;
     final media = MediaQuery.of(context);
     final screenWidth = media.size.width;
@@ -1118,15 +1281,28 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                                   _isPlaying && playheadTick == index;
                               final isRecordStart =
                                   !_isPlaying && _recordStartTick == index;
+                              final isDraftSelection =
+                                  _isTickInDraftSelection(index);
+                              final isActiveSelection =
+                                  _isTickInActiveSelection(index);
+                              final isBarNumberInSelection =
+                                  _isBarStartInSelection(index);
+                              final Color cellColor;
+                              if (isDraftSelection || isActiveSelection) {
+                                cellColor = Colors.green.withValues(alpha: 0.26);
+                              } else if (isPlayhead || isRecordStart) {
+                                cellColor = Colors.amber.withValues(alpha: 0.18);
+                              } else {
+                                cellColor = Colors.transparent;
+                              }
 
                               return GestureDetector(
-                                onTap: () => _setRecordStartTick(index),
+                                onTap: () => _handleTimeScaleTap(index),
+                                onLongPress: () => _beginNoteSelectionFromTick(index),
                                 child: Container(
                                   width: AppConstants.noteCellWidth,
                                   decoration: BoxDecoration(
-                                    color: isPlayhead || isRecordStart
-                                        ? Colors.amber.withValues(alpha: 0.18)
-                                        : Colors.transparent,
+                                    color: cellColor,
                                     border: Border(
                                       right: BorderSide(
                                         color: _getLineColor(index + 1),
@@ -1138,8 +1314,10 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                                       ? Center(
                                           child: Text(
                                             '${index ~/ ticksPerBar + 1}',
-                                            style: const TextStyle(
-                                              color: Colors.amber,
+                                            style: TextStyle(
+                                              color: isBarNumberInSelection
+                                                  ? Colors.greenAccent
+                                                  : Colors.amber,
                                               fontSize: 10,
                                               fontWeight: FontWeight.bold,
                                             ),
@@ -1156,10 +1334,13 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                   ),
                   const SizedBox(height: 12),
                   Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.translucent,
-                      onHorizontalDragUpdate: _handleGridHorizontalDrag,
-                      child: Container(
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: _horizontalOffsetNotifier,
+                      builder: (context, horizontalOffset, _) {
+                        return GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onHorizontalDragUpdate: _handleGridHorizontalDrag,
+                          child: Container(
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade800),
                           borderRadius: BorderRadius.circular(8),
@@ -1174,6 +1355,9 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                               final midiNote = _visibleMidiNotes[noteIndex];
                               final isBlackKey = _isBlackKey(midiNote);
                               final octaveName = _getOctaveName(midiNote);
+                              final notesForPitch = currentTrack.notes
+                                  .where((note) => note.pitch == midiNote)
+                                  .toList(growable: false);
 
                               return SizedBox(
                                 height: _rollRowHeight,
@@ -1251,11 +1435,21 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                                           for (int tickIndex = firstVisibleTick;
                                               tickIndex < lastVisibleTick;
                                               tickIndex++) {
-                                            final isNotePresent =
-                                                _isNotePresent(
-                                              midiNote,
-                                              tickIndex,
+                                            final existingNote =
+                                                PianoRollEditUseCases
+                                                    .findNoteCovering(
+                                              notes: notesForPitch,
+                                              pitch: midiNote,
+                                              tick: tickIndex,
                                             );
+                                            final isNotePresent =
+                                                existingNote != null;
+                                            final isSelectedNoteCell =
+                                                existingNote != null &&
+                                                    _isNoteInActiveSelection(
+                                                        existingNote) &&
+                                                    _isTickInActiveSelection(
+                                                        tickIndex);
                                             final isPending = _isPendingCell(
                                               midiNote,
                                               tickIndex,
@@ -1281,14 +1475,15 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                                                   child: Builder(
                                                     builder: (_) {
                                                       final isStart =
-                                                          _isNoteStart(
-                                                        midiNote,
-                                                        tickIndex,
-                                                      );
-                                                      final isEnd = _isNoteEnd(
-                                                        midiNote,
-                                                        tickIndex,
-                                                      );
+                                                          existingNote != null &&
+                                                              existingNote
+                                                                      .startTick ==
+                                                                  tickIndex;
+                                                      final isEnd =
+                                                          existingNote != null &&
+                                                              existingNote.endTick -
+                                                                      1 ==
+                                                                  tickIndex;
 
                                                       const double startRadius =
                                                           7.0;
@@ -1324,14 +1519,20 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                                                                     .withValues(
                                                                         alpha:
                                                                             0.55)
-                                                                : isNotePresent
-                                                                    ? currentTrack
-                                                                        .color
+                                                                : isSelectedNoteCell
+                                                                    ? Colors
+                                                                        .green
                                                                         .withValues(
                                                                             alpha:
-                                                                                0.78)
-                                                                    : Colors
-                                                                        .transparent,
+                                                                                0.82)
+                                                                    : isNotePresent
+                                                                        ? currentTrack
+                                                                            .color
+                                                                            .withValues(
+                                                                                alpha:
+                                                                                    0.78)
+                                                                        : Colors
+                                                                            .transparent,
                                                             borderRadius:
                                                                 isNotePresent
                                                                     ? BorderRadius
@@ -1379,8 +1580,10 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                           ),
                         ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
+                ),
+              ),
                   SizedBox(height: 96 + bottomInset),
                 ],
               ),

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_midi_engine/flutter_midi_engine.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:path_provider/path_provider.dart';
 
 import '../../data/models/track_model.dart';
@@ -30,9 +31,15 @@ class AudioService {
   Timer? _playbackTimer;
   Future<bool>? _initializingFuture;
 
+  StreamSubscription<dynamic>? _deviceChangeSubscription;
+  StreamSubscription<dynamic>? _becomingNoisySubscription;
+  StreamSubscription<dynamic>? _interruptionSubscription;
+  Timer? _audioRecoverDebounceTimer;
+
   bool _isPlaying = false;
   bool _isInitialized = false;
   bool _isDisposed = false;
+  bool _isRecoveringAudioEngine = false;
 
   int _currentTick = 0;
   int _maxTick = 0;
@@ -254,13 +261,14 @@ class AudioService {
     await ensureInitialized(forceReload: true);
   }
 
-  Future<bool> ensureInitialized({bool forceReload = false}) {
+  Future<bool> ensureInitialized({bool forceReload = false}) async {
     if (_isDisposed) {
       _isDisposed = false;
     }
 
     if (!forceReload && _isInitialized && _midiEngine != null) {
-      return Future.value(true);
+      await _configurePlaybackSession();
+      return true;
     }
 
     final pending = _initializingFuture;
@@ -272,8 +280,91 @@ class AudioService {
     });
   }
 
+  Future<void> _configurePlaybackSession() async {
+    final session = await AudioSession.instance;
+
+    await session.configure(
+      const AudioSessionConfiguration(
+        avAudioSessionCategory: AVAudioSessionCategory.playback,
+        avAudioSessionMode: AVAudioSessionMode.defaultMode,
+        avAudioSessionRouteSharingPolicy:
+            AVAudioSessionRouteSharingPolicy.defaultPolicy,
+        avAudioSessionSetActiveOptions:
+            AVAudioSessionSetActiveOptions.notifyOthersOnDeactivation,
+        androidAudioAttributes: AndroidAudioAttributes(
+          contentType: AndroidAudioContentType.music,
+          flags: AndroidAudioFlags.none,
+          usage: AndroidAudioUsage.media,
+        ),
+        androidAudioFocusGainType: AndroidAudioFocusGainType.gain,
+        androidWillPauseWhenDucked: true,
+      ),
+    );
+
+    await session.setActive(true);
+
+    _deviceChangeSubscription ??= session.devicesChangedEventStream.listen((_) {
+      debugPrint('Audio device changed. Scheduling MIDI engine recovery...');
+      _scheduleAudioEngineRecovery();
+    });
+
+    _becomingNoisySubscription ??=
+        session.becomingNoisyEventStream.listen((_) {
+      debugPrint('Audio output became noisy. Scheduling MIDI engine recovery...');
+      _scheduleAudioEngineRecovery();
+    });
+
+    _interruptionSubscription ??= session.interruptionEventStream.listen(
+      (event) {
+        if (event.begin) {
+          stopPlayback();
+        } else {
+          debugPrint('Audio interruption ended. Scheduling MIDI recovery...');
+          _scheduleAudioEngineRecovery();
+        }
+      },
+    );
+  }
+
+  void _scheduleAudioEngineRecovery() {
+    if (_isDisposed) return;
+
+    _audioRecoverDebounceTimer?.cancel();
+    _audioRecoverDebounceTimer = Timer(
+      const Duration(milliseconds: 300),
+      () {
+        unawaited(recoverAudioEngine());
+      },
+    );
+  }
+
+  Future<void> recoverAudioEngine() async {
+    if (_isDisposed || _isRecoveringAudioEngine) return;
+
+    _isRecoveringAudioEngine = true;
+    try {
+      stopPlayback();
+
+      try {
+        await _midiEngine?.stopAllNotes();
+        await _midiEngine?.unloadSoundfont();
+      } catch (_) {}
+
+      _midiEngine = null;
+      _isInitialized = false;
+      _trackChannels.clear();
+      _nextChannel = 0;
+
+      await ensureInitialized(forceReload: true);
+    } finally {
+      _isRecoveringAudioEngine = false;
+    }
+  }
+
   Future<bool> _initializeInternal({required bool forceReload}) async {
     try {
+      await _configurePlaybackSession();
+
       if (forceReload || _midiEngine == null) {
         try {
           await _midiEngine?.stopAllNotes();
@@ -285,7 +376,7 @@ class AudioService {
 
       await _midiEngine?.unmute();
 
-      final tempDir = await getTemporaryDirectory();
+      final tempDir = await getApplicationSupportDirectory();
       final sf2Path = '${tempDir.path}/Arachno_SoundFont_Version_1.0.sf2';
       final sf2File = File(sf2Path);
 
@@ -408,7 +499,7 @@ class AudioService {
     final isDrums = _isDrumProgram(program);
     final channel = _channelForTrack(trackId);
     final velocity =
-        ((isDrums ? 110 : 90) * volume).round().clamp(1, 127).toInt();
+        ((isDrums ? 115 : 60) * volume).round().clamp(1, 127).toInt();
 
     if (!isDrums) {
       await _safeMidiCall(
@@ -617,14 +708,23 @@ class AudioService {
   }
 
   Future<void> handleAppResumed() async {
-    if (!_isInitialized || _midiEngine == null) {
-      await ensureInitialized();
-    }
+    await recoverAudioEngine();
   }
 
   void dispose() {
     _isDisposed = true;
     stopPlayback();
+
+    _audioRecoverDebounceTimer?.cancel();
+    _deviceChangeSubscription?.cancel();
+    _becomingNoisySubscription?.cancel();
+    _interruptionSubscription?.cancel();
+
+    _audioRecoverDebounceTimer = null;
+    _deviceChangeSubscription = null;
+    _becomingNoisySubscription = null;
+    _interruptionSubscription = null;
+
     _safeMidiCall(() => _midiEngine?.unloadSoundfont());
     _midiEngine = null;
     _isInitialized = false;

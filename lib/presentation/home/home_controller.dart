@@ -7,6 +7,7 @@ import '../../data/models/track_model.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/track_repository.dart';
 import '../../data/usecases/export_midi_usecase_impl.dart';
+import '../../data/usecases/export_wav_usecase_impl.dart';
 import '../../domain/usecases/home/home_pattern_usecases.dart';
 import '../../domain/usecases/home/home_project_usecases.dart';
 import '../../domain/usecases/home/home_track_usecases.dart';
@@ -15,6 +16,7 @@ class HomeController extends ChangeNotifier {
   final TrackRepository _repository;
   final ProjectRepository _projectRepository;
   final ExportMidiUseCaseImpl _exportMidiUseCase;
+  final ExportWavUseCaseImpl _exportWavUseCase;
   final AudioService _audioService = AudioService();
 
   final ScrollController horizontalScrollController = ScrollController();
@@ -26,7 +28,8 @@ class HomeController extends ChangeNotifier {
 
   HomeController(this._repository)
       : _projectRepository = ProjectRepository(),
-        _exportMidiUseCase = ExportMidiUseCaseImpl();
+        _exportMidiUseCase = ExportMidiUseCaseImpl(),
+        _exportWavUseCase = ExportWavUseCaseImpl();
 
   List<Track> get tracks => _repository.getTracks().cast<Track>();
   bool get isPlaying => _audioService.isPlaying;
@@ -306,6 +309,17 @@ class HomeController extends ChangeNotifier {
     await _exportMidiUseCase.execute(
       tracks,
       share: share,
+      fileName: fileName,
+      bpm: bpm,
+    );
+  }
+
+  Future<void> exportWav({
+    String? fileName,
+    int bpm = 120,
+  }) async {
+    await _exportWavUseCase.execute(
+      tracks,
       fileName: fileName,
       bpm: bpm,
     );

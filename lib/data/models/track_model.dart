@@ -47,7 +47,7 @@ class Track extends TrackEntity {
     List<MidiNote>? notes,
     super.instrument = 'Пианино',
     super.volume = 1.0,
-  }) : super(notes: notes ?? []);
+  }) : super(notes: List<MidiNote>.from(notes ?? const []));
 
   @override
   List<MidiNote> get notes => super.notes.cast<MidiNote>();
@@ -66,7 +66,7 @@ class Track extends TrackEntity {
       name: name ?? this.name,
       isMuted: isMuted ?? this.isMuted,
       color: color ?? this.color,
-      notes: notes ?? List<MidiNote>.from(this.notes),
+      notes: List<MidiNote>.from(notes ?? this.notes),
       instrument: instrument ?? this.instrument,
       volume: volume ?? this.volume,
     );
@@ -98,3 +98,4 @@ class Track extends TrackEntity {
     );
   }
 }
+
