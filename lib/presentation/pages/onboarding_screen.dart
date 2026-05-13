@@ -102,7 +102,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       title: 'Запускай и экспортируй',
       description:
           'Если тебе нравится проделанная работа, то делись ей с друзьями',
-      hint: 'Можно экспортировать трек в формате WAV или MIDI для доработки в профессиональной компьютерной программе',
+      hint: 'Можно экспортировать трек в формате MIDI для доработки в профессиональной компьютерной программе',
       color: ProjectStyles.classic.primaryColor,
     ),
   ];

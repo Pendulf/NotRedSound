@@ -445,6 +445,117 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
     return currentTrack.notes.where(_isNoteInActiveSelection).toList();
   }
 
+  List<MidiNote> _selectedNotesRelativeToSelection() {
+    final rangeStart = _selectionRangeStartTick;
+    final rangeEnd = _selectionRangeEndTick;
+    if (rangeStart == null || rangeEnd == null) return [];
+
+    final result = <MidiNote>[];
+
+    for (final note in currentTrack.notes) {
+      if (!note.intersectsRange(rangeStart, rangeEnd)) continue;
+
+      final clippedStart = math.max(note.startTick, rangeStart);
+      final clippedEnd = math.min(note.endTick, rangeEnd);
+      final clippedDuration = clippedEnd - clippedStart;
+
+      if (clippedDuration <= 0) continue;
+
+      result.add(
+        MidiNote(
+          pitch: note.pitch,
+          startTick: clippedStart - rangeStart,
+          durationTicks: clippedDuration,
+        ),
+      );
+    }
+
+    PianoRollEditUseCases.sortNotes(result);
+    return result;
+  }
+
+  List<MidiNote> _replaceNotesInTickRange({
+    required List<MidiNote> sourceNotes,
+    required int rangeStart,
+    required int rangeEnd,
+    required List<MidiNote> insertingNotes,
+  }) {
+    final result = <MidiNote>[];
+
+    for (final note in sourceNotes) {
+      if (!note.intersectsRange(rangeStart, rangeEnd)) {
+        result.add(note);
+        continue;
+      }
+
+      if (note.startTick < rangeStart) {
+        final leftDuration = rangeStart - note.startTick;
+        if (leftDuration > 0) {
+          result.add(note.copyWith(durationTicks: leftDuration));
+        }
+      }
+
+      if (note.endTick > rangeEnd) {
+        final rightDuration = note.endTick - rangeEnd;
+        if (rightDuration > 0) {
+          result.add(
+            note.copyWith(
+              startTick: rangeEnd,
+              durationTicks: rightDuration,
+            ),
+          );
+        }
+      }
+    }
+
+    result.addAll(insertingNotes);
+    PianoRollEditUseCases.sortNotes(result);
+    return result;
+  }
+
+  void _copyActiveSelectionToTick(int targetTick) {
+    final rangeStart = _selectionRangeStartTick;
+    final rangeEnd = _selectionRangeEndTick;
+    if (rangeStart == null || rangeEnd == null) return;
+
+    final relativeNotes = _selectedNotesRelativeToSelection();
+    if (relativeNotes.isEmpty) return;
+
+    final selectionLength = rangeEnd - rangeStart;
+    if (selectionLength <= 0) return;
+
+    final targetStart = targetTick.clamp(0, maxTicks - 1).toInt();
+    final targetEnd = targetStart + selectionLength;
+
+    if (targetEnd > maxTicks) return;
+
+    final pastedNotes = relativeNotes
+        .map(
+          (note) => MidiNote(
+            pitch: note.pitch,
+            startTick: targetStart + note.startTick,
+            durationTicks: note.durationTicks,
+          ),
+        )
+        .toList();
+
+    setState(() {
+      _pushHistory();
+
+      currentTrack = currentTrack.copyWith(
+        notes: _replaceNotesInTickRange(
+          sourceNotes: currentTrack.notes,
+          rangeStart: targetStart,
+          rangeEnd: targetEnd,
+          insertingNotes: pastedNotes,
+        ),
+      );
+
+      _clearNoteSelection();
+      _commitTrackUpdate(clearPending: true);
+    });
+  }
+
   void _clearNoteSelection() {
     _selectionStartTick = null;
     _selectionEndTick = null;
@@ -468,6 +579,11 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
         _selectionEndTick = tick.clamp(0, maxTicks - 1).toInt();
         _clearPendingSelection();
       });
+      return;
+    }
+
+    if (_hasActiveSelection) {
+      _copyActiveSelectionToTick(tick);
       return;
     }
 
@@ -1288,7 +1404,9 @@ extension PianoRollScreenLogic on _PianoRollScreenState {
                               final isBarNumberInSelection =
                                   _isBarStartInSelection(index);
                               final Color cellColor;
-                              if (isDraftSelection || isActiveSelection) {
+                              if (isDraftSelection) {
+                                cellColor = Colors.green.withValues(alpha: 0.12);
+                              } else if (isActiveSelection) {
                                 cellColor = Colors.green.withValues(alpha: 0.26);
                               } else if (isPlayhead || isRecordStart) {
                                 cellColor = Colors.amber.withValues(alpha: 0.18);

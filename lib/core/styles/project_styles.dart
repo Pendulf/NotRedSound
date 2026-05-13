@@ -119,7 +119,7 @@ class ProjectStyles {
   static const ProjectStyle standard = ProjectStyle(
     type: ProjectStyleType.standard,
     id: 'standard',
-    displayName: 'Свой',
+    displayName: 'Полный',
     backgroundAsset: 'assets/background_dark.jpg',
     primaryColor: Colors.deepOrange,
     secondaryColor: Colors.amber,

@@ -1,9 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:permission_handler/permission_handler.dart';
 
 import 'core/services/audio_service.dart';
 import 'core/theme/app_theme.dart';
@@ -14,27 +12,11 @@ Future<void> main() async {
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
-
   ]);
 
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
 
   runApp(const MyApp());
-
-  unawaited(_warmUpAppServices());
-}
-
-Future<void> _warmUpAppServices() async {
-  try {
-    if (Platform.isAndroid) {
-      final storageStatus = await Permission.storage.request();
-      debugPrint('Storage permission: $storageStatus');
-    }
-
-    
-  } catch (e) {
-    debugPrint('Startup warm-up error: $e');
-  }
 }
 
 class MyApp extends StatefulWidget {
@@ -62,8 +44,11 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
       case AppLifecycleState.detached:
         _audioService.handleAppPaused();
         break;
+
       case AppLifecycleState.resumed:
-        unawaited(_audioService.handleAppResumed());
+        if (_audioService.isInitialized) {
+          unawaited(_audioService.handleAppResumed());
+        }
         break;
     }
   }

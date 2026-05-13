@@ -68,62 +68,244 @@ extension HomeScreenLogic on _HomeScreenState {
   });
 }
 
-  void _onBarLongPress(Track track, int barIndex) {
-    final segment = _controller.createSegmentFromBars(track.id, barIndex, 1);
+  int _minBar(int a, int b) => a < b ? a : b;
 
-    if (segment == null) {
-      _showSnackBar('В этом такте нет нот', Colors.orange);
-      return;
-    }
+  int _maxBar(int a, int b) => a > b ? a : b;
+
+  bool get _hasDraftSegmentSelection =>
+      _selectedSegmentStartBar != null && _selectedSegmentEndBar == null;
+
+  bool get _hasActiveSegmentSelection =>
+      _selectedSegmentStartBar != null && _selectedSegmentEndBar != null;
+
+  bool get _hasAnySegmentSelection => _selectedSegmentStartBar != null;
+
+  bool get _isTrackSegmentSelection =>
+      _hasAnySegmentSelection && !_isGlobalSegmentSelection;
+
+  bool get _isTimelineSegmentSelection =>
+      _hasAnySegmentSelection && _isGlobalSegmentSelection;
+
+  int? get _selectionRangeStartBar {
+    if (_selectedSegmentStartBar == null) return null;
+    if (_selectedSegmentEndBar == null) return _selectedSegmentStartBar;
+    return _minBar(_selectedSegmentStartBar!, _selectedSegmentEndBar!)
+        .clamp(0, AppConstants.maxBars - 1)
+        .toInt();
+  }
+
+  int? get _selectionRangeEndBar {
+    if (_selectedSegmentStartBar == null) return null;
+    if (_selectedSegmentEndBar == null) return _selectedSegmentStartBar;
+    return _maxBar(_selectedSegmentStartBar!, _selectedSegmentEndBar!)
+        .clamp(0, AppConstants.maxBars - 1)
+        .toInt();
+  }
+
+  int get _selectedBarCount {
+    final startBar = _selectionRangeStartBar;
+    final endBar = _selectionRangeEndBar;
+    if (startBar == null || endBar == null) return 0;
+    return endBar - startBar + 1;
+  }
+
+  bool _isBarInSelection(int barIndex) {
+    final startBar = _selectionRangeStartBar;
+    final endBar = _selectionRangeEndBar;
+    if (startBar == null || endBar == null) return false;
+    return barIndex >= startBar && barIndex <= endBar;
+  }
+
+  bool _isSelectionVisibleForTrack(Track track) {
+    if (!_hasAnySegmentSelection) return false;
+    if (_isGlobalSegmentSelection) return true;
+    return _selectedSegmentTrackId == track.id;
+  }
+
+  void _beginSegmentSelection({
+    required int barIndex,
+    required bool isGlobal,
+    String? trackId,
+  }) {
+    if (_controller.isPlaying) return;
 
     _segmentClearTimer?.cancel();
 
     setState(() {
-      _selectedSegment = segment;
-      _selectedTrackId = track.id;
-      _controller.setTrackSegment(track.id, segment);
-    });
-
-    _segmentClearTimer = Timer(const Duration(seconds: 5), () {
-      if (!mounted) return;
-
-      setState(() {
-        _clearSelectedSegment();
-      });
+      _selectedSegmentStartBar =
+          barIndex.clamp(0, AppConstants.maxBars - 1).toInt();
+      _selectedSegmentEndBar = null;
+      _selectedSegmentTrackId = isGlobal ? null : trackId;
+      _isGlobalSegmentSelection = isGlobal;
     });
   }
 
-  void _onBarTap(Track track, int barIndex) {
-    final hasSegment = _selectedSegment != null && _selectedTrackId == track.id;
+  void _onTimelineLongPress(int barIndex) {
+    _beginSegmentSelection(
+      barIndex: barIndex,
+      isGlobal: true,
+    );
+  }
 
-    if (hasSegment) {
-      final notesInBar = _getNotesInBar(track, barIndex);
-      final barHasNotes = notesInBar.isNotEmpty;
+  void _onTimelineTap(int barIndex) {
+    if (_controller.isPlaying) return;
 
-      _pushHistory();
-
-      if (barHasNotes) {
-        _controller.deleteNotesInBar(track.id, barIndex);
-      } else {
-        _controller.copySegmentToBar(track.id, _selectedSegment!, barIndex);
+    if (_hasDraftSegmentSelection) {
+      if (_isTimelineSegmentSelection) {
+        _finishSegmentSelection(barIndex);
       }
+      return;
+    }
 
-      setState(() {
-        _clearSelectedSegment();
-      });
+    if (_hasActiveSegmentSelection) {
+      if (_isTimelineSegmentSelection) {
+        _copySelectedBarsToBar(barIndex);
+      }
+      return;
+    }
+
+    _controller.setPlaybackStartBar(barIndex);
+  }
+
+  void _onBarLongPress(Track track, int barIndex) {
+    _beginSegmentSelection(
+      barIndex: barIndex,
+      isGlobal: false,
+      trackId: track.id,
+    );
+  }
+
+  void _onBarTap(Track track, int barIndex) {
+    if (_hasDraftSegmentSelection) {
+      if (_isTrackSegmentSelection && _selectedSegmentTrackId == track.id) {
+        _finishSegmentSelection(barIndex);
+      }
+      return;
+    }
+
+    if (_hasActiveSegmentSelection) {
+      if (_isTrackSegmentSelection && _selectedSegmentTrackId == track.id) {
+        _copySelectedBarsToBar(barIndex);
+      }
       return;
     }
 
     _openPianoRoll(track, initialBar: barIndex);
   }
 
+  void _finishSegmentSelection(int endBarIndex) {
+    final rawStartBar = _selectedSegmentStartBar;
+    if (rawStartBar == null) return;
+
+    final startBar = _minBar(rawStartBar, endBarIndex)
+        .clamp(0, AppConstants.maxBars - 1)
+        .toInt();
+    final endBar = _maxBar(rawStartBar, endBarIndex)
+        .clamp(0, AppConstants.maxBars - 1)
+        .toInt();
+
+    setState(() {
+      _selectedSegmentStartBar = startBar;
+      _selectedSegmentEndBar = endBar;
+    });
+  }
+
+  void _copySelectedBarsToBar(int targetBarIndex) {
+    final startBar = _selectionRangeStartBar;
+    final barCount = _selectedBarCount;
+
+    if (startBar == null || barCount <= 0) return;
+
+    _pushHistory();
+
+    final bool copied;
+    if (_isGlobalSegmentSelection) {
+      copied = _controller.copyBarsToBar(
+        startBar: startBar,
+        barCount: barCount,
+        targetBarIndex: targetBarIndex,
+      );
+    } else {
+      final trackId = _selectedSegmentTrackId;
+      if (trackId == null) {
+        _history.removeLast();
+        return;
+      }
+
+      copied = _controller.copyBarsToBarForTrack(
+        trackId: trackId,
+        startBar: startBar,
+        barCount: barCount,
+        targetBarIndex: targetBarIndex,
+      );
+    }
+
+    if (!copied) {
+      _history.removeLast();
+      _showSnackBar('Сегмент не помещается в конец проекта', Colors.orange);
+      return;
+    }
+
+    final message = _isGlobalSegmentSelection
+        ? 'Сегмент всех дорожек скопирован'
+        : 'Сегмент дорожки скопирован';
+
+    setState(() {
+      _clearSelectedSegment();
+    });
+    _showSnackBar(message, Colors.green);
+  }
+
+  void _deleteSelectedSegmentFromSource() {
+    final startBar = _selectionRangeStartBar;
+    final barCount = _selectedBarCount;
+
+    if (startBar == null || barCount <= 0) return;
+
+    _pushHistory();
+
+    final bool deleted;
+    if (_isGlobalSegmentSelection) {
+      deleted = _controller.deleteBarsFromAllTracks(
+        startBar: startBar,
+        barCount: barCount,
+      );
+    } else {
+      final trackId = _selectedSegmentTrackId;
+      if (trackId == null) {
+        _history.removeLast();
+        return;
+      }
+
+      deleted = _controller.deleteSegmentFromBars(
+        trackId,
+        startBar,
+        barCount,
+      );
+    }
+
+    if (!deleted) {
+      _history.removeLast();
+      _showSnackBar('Не удалось удалить выделенный сегмент', Colors.red);
+      return;
+    }
+
+    final message = _isGlobalSegmentSelection
+        ? 'Выделенный сегмент всех дорожек удалён'
+        : 'Выделенный сегмент дорожки удалён';
+
+    setState(() {
+      _clearSelectedSegment();
+    });
+    _showSnackBar(message, Colors.red);
+  }
+
   void _clearSelectedSegment() {
     _segmentClearTimer?.cancel();
-    if (_selectedTrackId != null) {
-      _controller.clearTrackSegment(_selectedTrackId!);
-    }
-    _selectedSegment = null;
-    _selectedTrackId = null;
+    _selectedSegmentStartBar = null;
+    _selectedSegmentEndBar = null;
+    _selectedSegmentTrackId = null;
+    _isGlobalSegmentSelection = false;
   }
 
   int _roundToNearestFive(int value) {
@@ -465,10 +647,7 @@ extension HomeScreenLogic on _HomeScreenState {
                         Navigator.pop(context);
                         setState(() {});
 
-                        WidgetsBinding.instance.addPostFrameCallback((_) {
-                          if (!mounted) return;
-                          _showExportFormatDialog();
-                        });
+                        _exportToMidi(share: true);
                       },
                     ),
                     ListTile(
@@ -515,76 +694,6 @@ extension HomeScreenLogic on _HomeScreenState {
           },
         );
       },
-    );
-  }
-
-  void _showExportFormatDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: Colors.grey[850],
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(
-            color: AppConstants.styleColor,
-            width: 1.2,
-          ),
-        ),
-        title: const Text(
-          'Отправить проект',
-          style: TextStyle(color: Colors.white),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.library_music, color: Colors.amber),
-              title: const Text(
-                'MIDI',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: const Text(
-                'Для доработки в FL Studio, GarageBand и других DAW',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _exportToMidi(share: true);
-              },
-            ),
-            const Divider(color: Colors.white24),
-            ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.audiotrack, color: Colors.lightBlue),
-              title: const Text(
-                'WAV',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              subtitle: const Text(
-                'Готовый аудиофайл только для отправки',
-                style: TextStyle(color: Colors.white54, fontSize: 12),
-              ),
-              onTap: () {
-                Navigator.pop(context);
-                _exportToWav();
-              },
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Отмена'),
-          ),
-        ],
-      ),
     );
   }
 
@@ -701,48 +810,6 @@ extension HomeScreenLogic on _HomeScreenState {
     }
   }
 
-  Future<void> _exportToWav() async {
-    if (_controller.tracks.isEmpty) {
-      _showSnackBar('Нет дорожек для WAV экспорта', Colors.red);
-      return;
-    }
-
-    final hasPlayableNotes = _controller.tracks.any(
-      (track) => !track.isMuted && track.notes.isNotEmpty,
-    );
-
-    if (!hasPlayableNotes) {
-      _showSnackBar('Нет активных дорожек с нотами', Colors.orange);
-      return;
-    }
-
-    final fileName = _controller.tracks.length == 1
-        ? '${_controller.tracks.first.name}.wav'
-        : 'NotRedSound_${DateTime.now().millisecondsSinceEpoch}.wav';
-
-    _showLoadingDialog();
-
-    try {
-      await _controller.exportWav(
-        fileName: fileName,
-        bpm: AppConstants.bpm,
-      );
-
-      if (!mounted) return;
-      Navigator.pop(context);
-
-      _showSnackBar(
-        'WAV файл отправлен',
-        Colors.green,
-        duration: const Duration(seconds: 2),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      Navigator.pop(context);
-      _showSnackBar('Ошибка WAV экспорта: $e', Colors.red);
-    }
-  }
-
   void _showLoadingDialog() {
     showDialog(
       context: context,
@@ -812,28 +879,34 @@ extension HomeScreenLogic on _HomeScreenState {
   }
 
   Widget _buildPlayheadHeaderOverlay() {
-    if (!_controller.isPlaying) {
-      return const SizedBox.shrink();
-    }
-
-    final tickWidth = AppConstants.barWidth / AppConstants.ticksPerBar;
-    final playheadX = (_controller.currentTick * tickWidth) -
-        (_controller.horizontalScrollController.hasClients
-            ? _controller.horizontalScrollController.offset
-            : 0);
-
-    return Positioned(
-      left: playheadX,
-      top: 10,
-      bottom: 10,
-      child: IgnorePointer(
-        child: Container(
-          width: 3,
-          color: Colors.amber,
-        ),
-      ),
-    );
+  if (!_controller.isPlaying) {
+    return const SizedBox.shrink();
   }
+
+  return AnimatedBuilder(
+    animation: _controller.horizontalScrollController,
+    builder: (context, _) {
+      final tickWidth = AppConstants.barWidth / AppConstants.ticksPerBar;
+      final offset = _controller.horizontalScrollController.hasClients
+          ? _controller.horizontalScrollController.offset
+          : 0.0;
+
+      final playheadX = (_controller.currentTick * tickWidth) - offset;
+
+      return Positioned(
+        left: playheadX,
+        top: 10,
+        bottom: 10,
+        child: IgnorePointer(
+          child: Container(
+            width: 3,
+            color: Colors.amber,
+          ),
+        ),
+      );
+    },
+  );
+}
 
   Widget _buildAnimatedTitle() {
     final pulseDuration = Duration(
@@ -1176,19 +1249,39 @@ extension HomeScreenLogic on _HomeScreenState {
                                 itemCount: AppConstants.maxBars,
                                 itemBuilder: (context, index) {
                                   final isSelected = selectedBar == index;
+                                  final isDraftSelection =
+                                      _isTimelineSegmentSelection &&
+                                          _hasDraftSegmentSelection &&
+                                          _selectedSegmentStartBar == index;
+                                  final isActiveSelection =
+                                      _isTimelineSegmentSelection &&
+                                          _hasActiveSegmentSelection &&
+                                          _isBarInSelection(index);
+
+                                  final Color cellColor;
+                                  if (isDraftSelection) {
+                                    cellColor =
+                                        Colors.green.withValues(alpha: 0.12);
+                                  } else if (isActiveSelection) {
+                                    cellColor =
+                                        Colors.green.withValues(alpha: 0.26);
+                                  } else if (isSelected) {
+                                    cellColor =
+                                        Colors.amber.withValues(alpha: 0.18);
+                                  } else {
+                                    cellColor = Colors.transparent;
+                                  }
 
                                   return GestureDetector(
                                     behavior: HitTestBehavior.opaque,
-                                    onTap: () =>
-                                        _controller.setPlaybackStartBar(index),
+                                    onLongPress: () =>
+                                        _onTimelineLongPress(index),
+                                    onTap: () => _onTimelineTap(index),
                                     child: Container(
                                       width: AppConstants.barWidth,
                                       alignment: Alignment.center,
                                       decoration: BoxDecoration(
-                                        color: isSelected
-                                            ? Colors.amber
-                                                .withValues(alpha: 0.18)
-                                            : Colors.transparent,
+                                        color: cellColor,
                                         border: Border(
                                           right: BorderSide(
                                             color: index ==
@@ -1201,8 +1294,11 @@ extension HomeScreenLogic on _HomeScreenState {
                                       ),
                                       child: Text(
                                         '${index + 1}',
-                                        style: const TextStyle(
-                                          color: Colors.amber,
+                                        style: TextStyle(
+                                          color: isDraftSelection ||
+                                                  isActiveSelection
+                                              ? Colors.greenAccent
+                                              : Colors.amber,
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
                                         ),
@@ -1237,10 +1333,14 @@ extension HomeScreenLogic on _HomeScreenState {
                                 itemCount: _controller.tracks.length,
                                 itemBuilder: (context, index) {
                                   final track = _controller.tracks[index];
-                                  final trackSegment =
-                                      _selectedTrackId == track.id
-                                          ? _selectedSegment
-                                          : null;
+                                  final showSelectionForTrack =
+                                      _isSelectionVisibleForTrack(track);
+                                  final selectionStartBar = showSelectionForTrack
+                                      ? _selectedSegmentStartBar
+                                      : null;
+                                  final selectionEndBar = showSelectionForTrack
+                                      ? _selectedSegmentEndBar
+                                      : null;
 
                                   return Padding(
                                     padding: const EdgeInsets.only(bottom: 16),
@@ -1261,6 +1361,11 @@ extension HomeScreenLogic on _HomeScreenState {
                                       onEditPressed: () =>
                                           _openPianoRoll(track),
                                       onDeletePressed: () {
+                                        if (_hasAnySegmentSelection) {
+                                          _deleteSelectedSegmentFromSource();
+                                          return;
+                                        }
+
                                         _pushHistory();
                                         _controller.deleteTrack(track.id);
                                         setState(() {});
@@ -1291,7 +1396,8 @@ extension HomeScreenLogic on _HomeScreenState {
                                           .horizontalScrollController,
                                       getNotesInBar: _getNotesInBar,
                                       getNoteRange: _getNoteRange,
-                                      currentSegment: trackSegment,
+                                      selectionStartBar: selectionStartBar,
+                                      selectionEndBar: selectionEndBar,
                                       onBarLongPress: (barIndex) =>
                                           _onBarLongPress(track, barIndex),
                                       onBarTap: (barIndex) =>

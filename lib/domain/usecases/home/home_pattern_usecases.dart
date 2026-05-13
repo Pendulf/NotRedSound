@@ -103,18 +103,38 @@ class HomePatternUseCases {
     );
   }
 
-  static List<MidiNote> deleteNotesInBar({
+
+
+  static List<MidiNote> copyNotesFromRange({
     required List<MidiNote> sourceNotes,
-    required int barIndex,
-    required int ticksPerBar,
+    required int sourceStart,
+    required int sourceEnd,
+    required int targetStart,
   }) {
-    final startTick = barIndex * ticksPerBar;
-    return replaceNotesInRange(
-      sourceNotes: sourceNotes,
-      rangeStart: startTick,
-      rangeEnd: startTick + ticksPerBar,
-      insertingNotes: const [],
-    );
+    final result = <MidiNote>[];
+
+    for (final note in sourceNotes) {
+      if (!note.intersectsRange(sourceStart, sourceEnd)) continue;
+
+      final clippedStart = note.startTick < sourceStart
+          ? sourceStart
+          : note.startTick;
+      final clippedEnd = note.endTick > sourceEnd ? sourceEnd : note.endTick;
+      final clippedDuration = clippedEnd - clippedStart;
+
+      if (clippedDuration <= 0) continue;
+
+      result.add(
+        MidiNote(
+          pitch: note.pitch,
+          startTick: targetStart + (clippedStart - sourceStart),
+          durationTicks: clippedDuration,
+        ),
+      );
+    }
+
+    sortNotes(result);
+    return result;
   }
 
   static List<MidiNote> notesInBar({

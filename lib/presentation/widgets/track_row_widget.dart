@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
 import 'instrument_picker_dialog.dart';
-import '../../data/models/pattern_segment.dart';
 import '../../data/models/track_model.dart';
 import 'control_button.dart';
 import 'pattern_painter.dart';
@@ -24,7 +23,8 @@ class TrackRowWidget extends StatelessWidget {
   final List<MidiNote> Function(Track, int) getNotesInBar;
   final Map<String, int> Function(Track) getNoteRange;
 
-  final PatternSegment? currentSegment;
+  final int? selectionStartBar;
+  final int? selectionEndBar;
   final Function(int) onBarLongPress;
   final Function(int) onBarTap;
 
@@ -45,7 +45,8 @@ class TrackRowWidget extends StatelessWidget {
     required this.horizontalScrollController,
     required this.getNotesInBar,
     required this.getNoteRange,
-    this.currentSegment,
+    this.selectionStartBar,
+    this.selectionEndBar,
     required this.onBarLongPress,
     required this.onBarTap,
     required this.playheadTick,
@@ -136,28 +137,9 @@ class TrackRowWidget extends StatelessWidget {
     );
   }
 
-  bool _notesMatchSegment(List<MidiNote> barNotes, PatternSegment? segment) {
-    if (segment == null) return false;
-    if (barNotes.length != segment.notes.length) return false;
-
-    for (int i = 0; i < barNotes.length; i++) {
-      final a = barNotes[i];
-      final b = segment.notes[i];
-
-      if (a.pitch != b.pitch ||
-          a.startTick != b.startTick ||
-          a.durationTicks != b.durationTicks) {
-        return false;
-      }
-    }
-
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
     final noteRange = getNoteRange(track);
-    final hasSegment = currentSegment != null;
     final ticksPerBar = AppConstants.ticksPerBar;
     final screenWidth = MediaQuery.of(context).size.width;
     final sideWidth = AppConstants.responsiveTrackInfoWidth(screenWidth) + 9;
@@ -322,15 +304,32 @@ class TrackRowWidget extends StatelessWidget {
                         barIndex < lastVisibleBar;
                         barIndex++) {
                       final notesInBar = getNotesInBar(track, barIndex);
-                      final isEmpty = notesInBar.isEmpty;
 
-                      final isSelectedSourceSegment =
-                          _notesMatchSegment(notesInBar, currentSegment);
+                      final hasDraftSelection =
+                          selectionStartBar != null && selectionEndBar == null;
+                      final hasActiveSelection =
+                          selectionStartBar != null && selectionEndBar != null;
 
-                      final isSegmentPasteTarget = hasSegment && isEmpty;
+                      Color segmentHighlightColor = Colors.transparent;
+                      if (hasDraftSelection && barIndex == selectionStartBar) {
+                        // Первый long press: сегмент только выбран как начало,
+                        // поэтому фон светлее и слабее, чем у полного выделения.
+                        segmentHighlightColor =
+                            Colors.green.withValues(alpha: 0.12);
+                      } else if (hasActiveSelection) {
+                        final startBar = selectionStartBar! < selectionEndBar!
+                            ? selectionStartBar!
+                            : selectionEndBar!;
+                        final endBar = selectionStartBar! > selectionEndBar!
+                            ? selectionStartBar!
+                            : selectionEndBar!;
 
-                      final isSegmentHighlighted =
-                          isSelectedSourceSegment || isSegmentPasteTarget;
+                        if (barIndex >= startBar && barIndex <= endBar) {
+                          // Полное выделение после второго короткого нажатия.
+                          segmentHighlightColor =
+                              Colors.green.withValues(alpha: 0.26);
+                        }
+                      }
 
                       visibleBars.add(
                         Positioned(
@@ -343,9 +342,7 @@ class TrackRowWidget extends StatelessWidget {
                             onTap: () => onBarTap(barIndex),
                             child: Container(
                               decoration: BoxDecoration(
-                                color: isSegmentHighlighted
-                                    ? track.color.withValues(alpha: 0.15)
-                                    : Colors.transparent,
+                                color: segmentHighlightColor,
                                 border: Border(
                                   right: BorderSide(
                                     color: Colors.grey.shade800,
@@ -370,20 +367,6 @@ class TrackRowWidget extends StatelessWidget {
                                       ticksPerBar: ticksPerBar,
                                     ),
                                   ),
-                                  if (isSegmentPasteTarget)
-                                    Positioned(
-                                      bottom: 0,
-                                      left: 4,
-                                      right: 4,
-                                      child: Container(
-                                        height: 3,
-                                        decoration: BoxDecoration(
-                                          color: track.color,
-                                          borderRadius:
-                                              BorderRadius.circular(2),
-                                        ),
-                                      ),
-                                    ),
                                 ],
                               ),
                             ),

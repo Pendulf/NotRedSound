@@ -7,7 +7,6 @@ import '../widgets/instrument_picker_dialog.dart';
 import '../../core/navigation/fade_page_route.dart';
 import '../../core/styles/project_style.dart';
 import '../../core/styles/project_styles.dart';
-import '../../data/models/pattern_segment.dart';
 import '../../data/models/track_model.dart';
 import '../../data/content/app_help_content.dart';
 import '../../data/repositories/track_repository.dart';
@@ -38,8 +37,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late HomeController _controller;
   late TrackRepository _repository;
 
-  PatternSegment? _selectedSegment;
-  String? _selectedTrackId;
+  int? _selectedSegmentStartBar;
+  int? _selectedSegmentEndBar;
+  String? _selectedSegmentTrackId;
+  bool _isGlobalSegmentSelection = false;
   Timer? _segmentClearTimer;
 
   Timer? _titlePulseTimer;

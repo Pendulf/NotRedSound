@@ -7,7 +7,6 @@ import '../../data/models/track_model.dart';
 import '../../data/repositories/project_repository.dart';
 import '../../data/repositories/track_repository.dart';
 import '../../data/usecases/export_midi_usecase_impl.dart';
-import '../../data/usecases/export_wav_usecase_impl.dart';
 import '../../domain/usecases/home/home_pattern_usecases.dart';
 import '../../domain/usecases/home/home_project_usecases.dart';
 import '../../domain/usecases/home/home_track_usecases.dart';
@@ -16,7 +15,6 @@ class HomeController extends ChangeNotifier {
   final TrackRepository _repository;
   final ProjectRepository _projectRepository;
   final ExportMidiUseCaseImpl _exportMidiUseCase;
-  final ExportWavUseCaseImpl _exportWavUseCase;
   final AudioService _audioService = AudioService();
 
   final ScrollController horizontalScrollController = ScrollController();
@@ -28,8 +26,7 @@ class HomeController extends ChangeNotifier {
 
   HomeController(this._repository)
       : _projectRepository = ProjectRepository(),
-        _exportMidiUseCase = ExportMidiUseCaseImpl(),
-        _exportWavUseCase = ExportWavUseCaseImpl();
+        _exportMidiUseCase = ExportMidiUseCaseImpl();
 
   List<Track> get tracks => _repository.getTracks().cast<Track>();
   bool get isPlaying => _audioService.isPlaying;
@@ -94,13 +91,23 @@ class HomeController extends ChangeNotifier {
     );
   }
 
-  void copySegmentToBar(
+  bool copySegmentToBar(
     String trackId,
     PatternSegment segment,
     int targetBarIndex,
   ) {
     final track = _findTrack(trackId);
-    if (track == null) return;
+    if (track == null) return false;
+
+    final targetStart = targetBarIndex * _ticksPerBar;
+    final targetEnd = targetStart + (segment.barLength * _ticksPerBar);
+
+    if (targetBarIndex < 0 ||
+        targetStart < 0 ||
+        targetStart >= AppConstants.maxTicks ||
+        targetEnd > AppConstants.maxTicks) {
+      return false;
+    }
 
     final updatedNotes = HomePatternUseCases.copySegmentToBar(
       sourceNotes: track.notes,
@@ -111,20 +118,161 @@ class HomeController extends ChangeNotifier {
 
     _repository.updateTrack(track.copyWith(notes: updatedNotes));
     notifyListeners();
+    return true;
   }
 
-  void deleteNotesInBar(String trackId, int barIndex) {
+  bool deleteSegmentFromBars(
+    String trackId,
+    int startBar,
+    int barCount,
+  ) {
     final track = _findTrack(trackId);
-    if (track == null) return;
+    if (track == null) return false;
 
-    final updatedNotes = HomePatternUseCases.deleteNotesInBar(
+    final safeBarCount = barCount.clamp(1, AppConstants.maxBars).toInt();
+    final rangeStart = startBar * _ticksPerBar;
+    final rangeEnd = rangeStart + (safeBarCount * _ticksPerBar);
+
+    if (startBar < 0 ||
+        rangeStart < 0 ||
+        rangeStart >= AppConstants.maxTicks ||
+        rangeEnd > AppConstants.maxTicks) {
+      return false;
+    }
+
+    final updatedNotes = HomePatternUseCases.replaceNotesInRange(
       sourceNotes: track.notes,
-      barIndex: barIndex,
-      ticksPerBar: _ticksPerBar,
+      rangeStart: rangeStart,
+      rangeEnd: rangeEnd,
+      insertingNotes: const [],
     );
 
     _repository.updateTrack(track.copyWith(notes: updatedNotes));
     notifyListeners();
+    return true;
+  }
+
+  bool copyBarsToBarForTrack({
+    required String trackId,
+    required int startBar,
+    required int barCount,
+    required int targetBarIndex,
+  }) {
+    final track = _findTrack(trackId);
+    if (track == null) return false;
+
+    final safeBarCount = barCount.clamp(1, AppConstants.maxBars).toInt();
+    final sourceStart = startBar * _ticksPerBar;
+    final sourceEnd = sourceStart + (safeBarCount * _ticksPerBar);
+    final targetStart = targetBarIndex * _ticksPerBar;
+    final targetEnd = targetStart + (safeBarCount * _ticksPerBar);
+
+    if (startBar < 0 ||
+        targetBarIndex < 0 ||
+        sourceStart < 0 ||
+        sourceStart >= AppConstants.maxTicks ||
+        sourceEnd > AppConstants.maxTicks ||
+        targetStart < 0 ||
+        targetStart >= AppConstants.maxTicks ||
+        targetEnd > AppConstants.maxTicks) {
+      return false;
+    }
+
+    final insertingNotes = HomePatternUseCases.copyNotesFromRange(
+      sourceNotes: track.notes,
+      sourceStart: sourceStart,
+      sourceEnd: sourceEnd,
+      targetStart: targetStart,
+    );
+
+    final updatedNotes = HomePatternUseCases.replaceNotesInRange(
+      sourceNotes: track.notes,
+      rangeStart: targetStart,
+      rangeEnd: targetEnd,
+      insertingNotes: insertingNotes,
+    );
+
+    _repository.updateTrack(track.copyWith(notes: updatedNotes));
+    notifyListeners();
+    return true;
+  }
+
+  bool copyBarsToBar({
+    required int startBar,
+    required int barCount,
+    required int targetBarIndex,
+  }) {
+    final safeBarCount = barCount.clamp(1, AppConstants.maxBars).toInt();
+    final sourceStart = startBar * _ticksPerBar;
+    final sourceEnd = sourceStart + (safeBarCount * _ticksPerBar);
+    final targetStart = targetBarIndex * _ticksPerBar;
+    final targetEnd = targetStart + (safeBarCount * _ticksPerBar);
+
+    if (startBar < 0 ||
+        targetBarIndex < 0 ||
+        sourceStart < 0 ||
+        sourceStart >= AppConstants.maxTicks ||
+        sourceEnd > AppConstants.maxTicks ||
+        targetStart < 0 ||
+        targetStart >= AppConstants.maxTicks ||
+        targetEnd > AppConstants.maxTicks) {
+      return false;
+    }
+
+    final sourceTracks = List<Track>.from(tracks);
+
+    for (final track in sourceTracks) {
+      final insertingNotes = HomePatternUseCases.copyNotesFromRange(
+        sourceNotes: track.notes,
+        sourceStart: sourceStart,
+        sourceEnd: sourceEnd,
+        targetStart: targetStart,
+      );
+
+      final updatedNotes = HomePatternUseCases.replaceNotesInRange(
+        sourceNotes: track.notes,
+        rangeStart: targetStart,
+        rangeEnd: targetEnd,
+        insertingNotes: insertingNotes,
+      );
+
+      _repository.updateTrack(track.copyWith(notes: updatedNotes));
+    }
+
+    notifyListeners();
+    return true;
+  }
+
+  bool deleteBarsFromAllTracks({
+    required int startBar,
+    required int barCount,
+  }) {
+    final safeBarCount = barCount.clamp(1, AppConstants.maxBars).toInt();
+    final rangeStart = startBar * _ticksPerBar;
+    final rangeEnd = rangeStart + (safeBarCount * _ticksPerBar);
+
+    if (startBar < 0 ||
+        rangeStart < 0 ||
+        rangeStart >= AppConstants.maxTicks ||
+        rangeEnd > AppConstants.maxTicks) {
+      return false;
+    }
+
+    final sourceTracks = List<Track>.from(tracks);
+
+    for (final track in sourceTracks) {
+      final updatedNotes = HomePatternUseCases.replaceNotesInRange(
+        sourceNotes: track.notes,
+        rangeStart: rangeStart,
+        rangeEnd: rangeEnd,
+        insertingNotes: const [],
+      );
+
+      _repository.updateTrack(track.copyWith(notes: updatedNotes));
+    }
+
+    notifyListeners();
+    return true;
   }
 
   void addTrack() {
@@ -314,16 +462,6 @@ class HomeController extends ChangeNotifier {
     );
   }
 
-  Future<void> exportWav({
-    String? fileName,
-    int bpm = 120,
-  }) async {
-    await _exportWavUseCase.execute(
-      tracks,
-      fileName: fileName,
-      bpm: bpm,
-    );
-  }
 
   Future<void> saveProject({ProjectStyleType? styleType}) async {
     final resolvedType = styleType ?? AppConstants.currentStyleType;
