@@ -38,7 +38,8 @@ class AppConstants {
   }
 
   static double responsiveBarWidth(double screenWidth) {
-    final available = screenWidth - (responsiveTrackInfoWidth(screenWidth) + 24);
+    final available =
+        screenWidth - (responsiveTrackInfoWidth(screenWidth) + 24);
     return (available / 2.2).clamp(56.0, 170.0).toDouble();
   }
 
@@ -46,8 +47,7 @@ class AppConstants {
     barWidth = responsiveBarWidth(screenWidth);
   }
 
-
-  static const int minNote = 36;
+  static const int minNote = 24;
   static const int maxNote = 84;
 
   static const double noteCellWidth = 35;
@@ -63,7 +63,8 @@ class AppConstants {
 
   static String get timeSignatureLabel => '$beatsPerBar/4';
 
-  static ProjectStyle get currentStyle => ProjectStyles.byType(currentStyleType);
+  static ProjectStyle get currentStyle =>
+      ProjectStyles.byType(currentStyleType);
   static String get background => currentStyle.backgroundAsset;
   static Color get styleColor => currentStyle.primaryColor;
   static Color get styleAccentColor => currentStyle.secondaryColor;

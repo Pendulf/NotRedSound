@@ -4,7 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../core/constants/app_constants.dart';
-import 'onboarding_screen.dart';
+import '../onboarding/onboarding_screen.dart';
 import '../../core/navigation/fade_page_route.dart';
 
 class SplashScreen extends StatefulWidget {

@@ -1,6 +1,6 @@
 import '../../domain/entities/track_entity.dart';
 import '../../domain/repositories/track_repository_interface.dart';
-import '../models/track_model.dart';
+import '../../domain/entities/track_model.dart';
 
 class TrackRepository implements TrackRepositoryInterface {
   final List<Track> _tracks = [];

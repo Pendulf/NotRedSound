@@ -1,13 +1,11 @@
 class PianoRollDrumContent {
-  static const int minDrumNote = 36; // C2
-  static const int maxDrumNote = 60; // C4
+  static const int minDrumNote = 36;
+  static const int maxDrumNote = 60;
 
   static const int kickNote = 36;
   static const int snareNote = 38;
   static const int closedHatNote = 42;
 
-  /// Visible drum rows for the unified Piano Roll drum mode.
-  /// The order is top-to-bottom, so the highest note is first.
   static const List<int> c2ToC4VisibleNotes = [
     60,
     59,

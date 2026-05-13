@@ -41,3 +41,4 @@ class TrackEntity {
     this.volume = 1.0,
   }) : notes = notes ?? [];
 }
+

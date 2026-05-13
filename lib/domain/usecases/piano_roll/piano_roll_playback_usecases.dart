@@ -1,4 +1,4 @@
-import '../../../data/models/track_model.dart';
+import '../../entities/track_model.dart';
 
 class PianoRollPlaybackUseCases {
   const PianoRollPlaybackUseCases._();

@@ -1,4 +1,4 @@
-import '../models/track_model.dart';
+import '../entities/track_model.dart';
 
 class TrackSnapshotUtils {
   const TrackSnapshotUtils._();

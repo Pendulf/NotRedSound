@@ -4,10 +4,8 @@ class PatternSegment {
   final String id;
   final String name;
 
-  /// Ноты хранятся ОТНОСИТЕЛЬНО начала сегмента
   final List<MidiNote> notes;
 
-  /// Длина сегмента в тактах
   final int barLength;
   final DateTime createdAt;
 

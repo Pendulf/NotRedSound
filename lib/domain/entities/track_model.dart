@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../domain/entities/track_entity.dart';
+import 'track_entity.dart';
 
 class MidiNote extends MidiNoteEntity {
   MidiNote({
@@ -98,4 +98,3 @@ class Track extends TrackEntity {
     );
   }
 }
-

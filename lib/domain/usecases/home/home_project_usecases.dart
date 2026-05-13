@@ -1,8 +1,8 @@
 import '../../../core/constants/app_constants.dart';
 import '../../../core/styles/project_style.dart';
 import '../../../core/styles/project_styles.dart';
-import '../../../data/models/track_model.dart';
-import '../../../domain/entities/project_snapshot.dart';
+import '../../entities/track_model.dart';
+import '../../entities/project_snapshot.dart';
 
 class HomeProjectUseCases {
   const HomeProjectUseCases._();

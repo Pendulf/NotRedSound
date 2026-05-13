@@ -8,7 +8,7 @@ import '../../core/styles/project_style.dart';
 import '../../core/styles/project_styles.dart';
 import '../../domain/entities/project_snapshot.dart';
 import '../../domain/repositories/project_repository_interface.dart';
-import '../models/track_model.dart';
+import '../../domain/entities/track_model.dart';
 
 class ProjectRepository implements ProjectRepositoryInterface {
   Future<File> _projectFile({ProjectStyleType? styleType}) async {

@@ -8,7 +8,7 @@ import 'package:share_plus/share_plus.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../domain/entities/track_entity.dart';
-import '../../domain/usecases/midi/export_midi_usecase.dart';
+import '../../domain/usecases/export/export_midi_usecase.dart';
 
 class ExportMidiUseCaseImpl implements ExportMidiUseCase {
   @override
@@ -86,7 +86,7 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
 
         await Share.shareXFiles(
           [XFile(zipFile.path)],
-          text: 'MIDI файлы дорожек из NotRed',
+          text: 'MIDI файлы дорожек из NotRedSound',
         );
 
         await zipFile.delete();
@@ -243,7 +243,7 @@ class ExportMidiUseCaseImpl implements ExportMidiUseCase {
 
     await Share.shareXFiles(
       [XFile(file.path)],
-      text: 'MIDI файл из NotRed',
+      text: 'MIDI файл из NotRedSound',
     );
   }
 

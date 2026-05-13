@@ -1,5 +1,5 @@
-import '../../../core/services/voice_recorder_service.dart';
-import '../../../data/models/track_model.dart';
+import '../../entities/voice_note_entity.dart';
+import '../../entities/track_model.dart';
 
 class PianoRollDrumUseCases {
   const PianoRollDrumUseCases._();
@@ -10,7 +10,7 @@ class PianoRollDrumUseCases {
   }
 
   static List<MidiNote> convertDrumVoiceNotes({
-    required List<VoiceNote> voiceNotes,
+    required List<VoiceNoteEntity> voiceNotes,
     required int insertStartTick,
     required int maxTicks,
     required List<int> allowedNotes,

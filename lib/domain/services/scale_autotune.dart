@@ -1,4 +1,4 @@
-import '../services/voice_recorder_service.dart';
+import '../entities/voice_note_entity.dart';
 
 class ScaleAutotune {
   static const List<String> noteNames = [
@@ -91,13 +91,15 @@ class ScaleAutotune {
     selectedMode = scaleModes.containsKey(mode) ? mode : 'Минор';
   }
 
-  static Map<String, dynamic>? detectScaleFromVoiceNotes(List<VoiceNote> notes) {
+  static Map<String, dynamic>? detectScaleFromVoiceNotes(
+      List<VoiceNoteEntity> notes) {
     if (notes.isEmpty) return null;
 
     final weights = <int, double>{};
     for (final note in notes) {
       final pitchClass = note.pitch % 12;
-      final weight = note.durationTicks <= 0 ? 1.0 : note.durationTicks.toDouble();
+      final weight =
+          note.durationTicks <= 0 ? 1.0 : note.durationTicks.toDouble();
       weights[pitchClass] = (weights[pitchClass] ?? 0) + weight;
     }
 

@@ -1,13 +1,13 @@
 import '../../../core/constants/app_constants.dart';
-import '../../../core/music/scale_autotune.dart';
-import '../../../core/services/voice_recorder_service.dart';
-import '../../../data/models/track_model.dart';
+import '../../services/scale_autotune.dart';
+import '../../entities/voice_note_entity.dart';
+import '../../entities/track_model.dart';
 
 class PianoRollVoiceUseCases {
   const PianoRollVoiceUseCases._();
 
   static List<MidiNote> convertVoiceNotes({
-    required List<VoiceNote> voiceNotes,
+    required List<VoiceNoteEntity> voiceNotes,
     required int insertStartTick,
     required int maxTicks,
     int octaveShift = 0,

@@ -1,5 +1,4 @@
 name: not_red_sound
-description: "PPC"
 publish_to: 'none'
 version: 1.0.0
 
@@ -24,6 +23,7 @@ dependencies:
   # Аудио воспроизведение (опционально)
   flutter_sound: 9.30.0
   audio_session: 0.2.3  
+  path_provider: ^2.1.5
 
 
   

@@ -3,9 +3,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'core/services/audio_service.dart';
+import 'infrastructure/audio/audio_service.dart';
 import 'core/theme/app_theme.dart';
-import 'presentation/pages/splash_screen.dart';
+import 'presentation/splash/splash_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();

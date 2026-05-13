@@ -5,7 +5,7 @@ import '../../core/navigation/fade_page_route.dart';
 import '../../core/styles/project_style.dart';
 import '../../core/styles/project_styles.dart';
 import '../home/home_screen.dart';
-import 'onboarding_screen.dart';
+import '../onboarding/onboarding_screen.dart';
 
 class LaunchScreen extends StatelessWidget {
   const LaunchScreen({super.key});
@@ -55,7 +55,7 @@ class LaunchScreen extends StatelessWidget {
       
       
       (
-        label: 'Полная версия',
+        label: 'Своя версия',
         subtitle: 'Полный режим',
         styleType: ProjectStyleType.standard,
         loadSavedProject: true,

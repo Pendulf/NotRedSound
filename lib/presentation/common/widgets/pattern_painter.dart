@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../data/models/track_model.dart';
+import '../../../domain/entities/track_model.dart';
 
 class PatternPainter extends CustomPainter {
   final List<MidiNote> notes;

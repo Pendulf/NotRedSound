@@ -1,4 +1,5 @@
-import '../../../data/models/track_model.dart';
+import '../../entities/track_model.dart';
+import '../../utils/track_snapshot_utils.dart';
 
 class PianoRollEditUseCases {
   const PianoRollEditUseCases._();
@@ -123,5 +124,92 @@ class PianoRollEditUseCases {
     merged.add(current);
     sortNotes(merged);
     return merged;
+  }
+}
+
+class PianoRollEditorController {
+  int? pendingStartTick;
+  int? pendingPitch;
+
+  int selectionStartTick;
+  int? selectionEndTick;
+
+  bool octaveShiftUpMode = true;
+  bool splitMode = false;
+
+  final List<List<MidiNote>> history = [];
+
+  PianoRollEditorController({required int initialStartTick})
+      : selectionStartTick = -1;
+
+  int? get nullableSelectionStartTick =>
+      selectionStartTick < 0 ? null : selectionStartTick;
+
+  set nullableSelectionStartTick(int? value) {
+    selectionStartTick = value ?? -1;
+  }
+
+  List<MidiNote> cloneNotes(List<MidiNote> source) {
+    return TrackSnapshotUtils.cloneNotes(source);
+  }
+
+  void pushHistory(List<MidiNote> source) {
+    history.add(cloneNotes(source));
+    if (history.length > 100) {
+      history.removeAt(0);
+    }
+  }
+
+  List<MidiNote>? popUndo() {
+    if (history.isEmpty) return null;
+    return history.removeLast();
+  }
+
+  void clearPendingSelection() {
+    pendingStartTick = null;
+    pendingPitch = null;
+  }
+
+  void clearNoteSelection() {
+    nullableSelectionStartTick = null;
+    selectionEndTick = null;
+  }
+
+  bool get hasDraftSelection =>
+      nullableSelectionStartTick != null && selectionEndTick == null;
+
+  bool get hasActiveSelection =>
+      nullableSelectionStartTick != null && selectionEndTick != null;
+
+  int? selectionRangeStartTick(int maxTicks) {
+    final start = nullableSelectionStartTick;
+    final end = selectionEndTick;
+    if (start == null || end == null) return null;
+    return (start < end ? start : end).clamp(0, maxTicks).toInt();
+  }
+
+  int? selectionRangeEndTick(int maxTicks) {
+    final start = nullableSelectionStartTick;
+    final end = selectionEndTick;
+    if (start == null || end == null) return null;
+    return ((start > end ? start : end) + 1).clamp(0, maxTicks).toInt();
+  }
+
+  bool isTickInDraftSelection(int tick) {
+    return hasDraftSelection && nullableSelectionStartTick == tick;
+  }
+
+  bool isTickInActiveSelection(int tick, int maxTicks) {
+    final rangeStart = selectionRangeStartTick(maxTicks);
+    final rangeEnd = selectionRangeEndTick(maxTicks);
+    if (rangeStart == null || rangeEnd == null) return false;
+    return tick >= rangeStart && tick < rangeEnd;
+  }
+
+  bool isNoteInActiveSelection(MidiNote note, int maxTicks) {
+    final rangeStart = selectionRangeStartTick(maxTicks);
+    final rangeEnd = selectionRangeEndTick(maxTicks);
+    if (rangeStart == null || rangeEnd == null) return false;
+    return note.intersectsRange(rangeStart, rangeEnd);
   }
 }

@@ -1,5 +1,5 @@
-import '../../../data/models/pattern_segment.dart';
-import '../../../data/models/track_model.dart';
+import '../../entities/pattern_segment.dart';
+import '../../entities/track_model.dart';
 
 class HomePatternUseCases {
   const HomePatternUseCases._();
@@ -103,8 +103,6 @@ class HomePatternUseCases {
     );
   }
 
-
-
   static List<MidiNote> copyNotesFromRange({
     required List<MidiNote> sourceNotes,
     required int sourceStart,
@@ -116,9 +114,8 @@ class HomePatternUseCases {
     for (final note in sourceNotes) {
       if (!note.intersectsRange(sourceStart, sourceEnd)) continue;
 
-      final clippedStart = note.startTick < sourceStart
-          ? sourceStart
-          : note.startTick;
+      final clippedStart =
+          note.startTick < sourceStart ? sourceStart : note.startTick;
       final clippedEnd = note.endTick > sourceEnd ? sourceEnd : note.endTick;
       final clippedDuration = clippedEnd - clippedStart;
 

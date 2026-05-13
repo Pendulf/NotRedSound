@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_sound/flutter_sound.dart';
 import 'package:permission_handler/permission_handler.dart';
 
-import '../constants/app_constants.dart';
+import '../../core/constants/app_constants.dart';
+import '../../domain/entities/voice_note_entity.dart';
 
 enum VoiceRecognitionMode {
   melody,
@@ -667,16 +668,11 @@ class VoiceSegment {
   });
 }
 
-class VoiceNote {
-  int pitch;
-  int startTick;
-  int durationTicks;
-  final double? sourceFrequencyHz;
-
+class VoiceNote extends VoiceNoteEntity {
   VoiceNote({
-    required this.pitch,
-    required this.startTick,
-    required this.durationTicks,
-    this.sourceFrequencyHz,
+    required super.pitch,
+    required super.startTick,
+    required super.durationTicks,
+    super.sourceFrequencyHz,
   });
 }

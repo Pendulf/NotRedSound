@@ -7,8 +7,8 @@ import 'package:flutter_midi_engine/flutter_midi_engine.dart';
 import 'package:audio_session/audio_session.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../../data/models/track_model.dart';
-import '../constants/app_constants.dart';
+import '../../domain/entities/track_model.dart';
+import '../../core/constants/app_constants.dart';
 
 class _ScheduledNoteEvent {
   final int pitch;
@@ -77,75 +77,52 @@ class AudioService {
   ];
 
   static const Map<String, int> instruments = {
-    // ===== КЛАВИШИ =====
     'Пианино': 0,
     'Яркое пианино': 1,
     'Электропианино': 4,
-
-    // ===== КОЛОКОЛЬЧИКИ =====
     'Челеста': 8,
     'Музыкальная шкатулка': 10,
     'Маримба': 12,
     'Ситар': 15,
     'Кристалл': 98,
-
-    // ===== ОРГАНЫ =====
     'Орган': 16,
     'Перкуссионный орган': 17,
     'Рок-орган': 18,
     'Церковный орган': 19,
     'Губная гармошка': 22,
-
-    // ===== ГИТАРЫ =====
     'Нейлоновая гитара': 24,
     'Стальная гитара': 25,
     'Джаз-гитара': 26,
     'Чистая гитара': 27,
     'Овердрайв гитара': 29,
     'Дисторшн гитара': 30,
-
-    // ===== БАСЫ =====
     'Акустический бас': 32,
     'Звонкий бас': 34,
     'Синт-бас': 38,
-
-    // ===== СТРУННЫЕ =====
     'Скрипка': 40,
     'Виолончель': 42,
     'Приглушённые струны': 45,
     'Струнный ансамбль': 48,
     'Терменвокс': 110,
-
-    // ===== ХОР =====
     'Хор "Аа"': 52,
     'Хор "Оо"': 53,
-
-    // ===== ДУХОВЫЕ =====
     'Тромбон': 57,
     'Сопрано саксофон': 64,
     'Кларнет': 71,
     'Флейта': 73,
     'Пан-флейта': 75,
     'Свист': 78,
-
-    // ===== СИНТЕЗАТОРЫ =====
     'Волна Квадрат': 80,
     'Волна Пила': 86,
     'Полисинт': 90,
     'Моносинт': 114,
-
-    // ===== АТМОСФЕРА =====
     'Фантазия': 88,
     'Стеклянный смычок': 92,
     'Метал': 93,
-
-    // ===== ПЕРКУССИЯ =====
     'Бочка': 116,
     'Том': 117,
     'Бочка 2': 118,
     'Ударные': 128,
-
-    // ===== ЗВУКИ =====
     'Шум ладов гитары': 120,
     'Пение птиц': 123,
     'Телефон': 124,
@@ -308,9 +285,9 @@ class AudioService {
       _scheduleAudioEngineRecovery();
     });
 
-    _becomingNoisySubscription ??=
-        session.becomingNoisyEventStream.listen((_) {
-      debugPrint('Audio output became noisy. Scheduling MIDI engine recovery...');
+    _becomingNoisySubscription ??= session.becomingNoisyEventStream.listen((_) {
+      debugPrint(
+          'Audio output became noisy. Scheduling MIDI engine recovery...');
       _scheduleAudioEngineRecovery();
     });
 

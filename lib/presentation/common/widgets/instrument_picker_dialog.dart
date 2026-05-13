@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_constants.dart';
-import '../../data/models/track_model.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../domain/entities/track_model.dart';
 
 class _InstrumentSection {
   final String title;

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 
-import '../../core/constants/app_constants.dart';
-import 'instrument_picker_dialog.dart';
-import '../../data/models/track_model.dart';
-import 'control_button.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../common/widgets/instrument_picker_dialog.dart';
+import '../../../domain/entities/track_model.dart';
+import '../../common/widgets/control_button.dart';
 import 'pattern_painter.dart';
 
 class TrackRowWidget extends StatelessWidget {
@@ -312,8 +312,8 @@ class TrackRowWidget extends StatelessWidget {
 
                       Color segmentHighlightColor = Colors.transparent;
                       if (hasDraftSelection && barIndex == selectionStartBar) {
-                        // Первый long press: сегмент только выбран как начало,
-                        // поэтому фон светлее и слабее, чем у полного выделения.
+                        
+                        
                         segmentHighlightColor =
                             Colors.green.withValues(alpha: 0.12);
                       } else if (hasActiveSelection) {
@@ -325,7 +325,7 @@ class TrackRowWidget extends StatelessWidget {
                             : selectionEndBar!;
 
                         if (barIndex >= startBar && barIndex <= endBar) {
-                          // Полное выделение после второго короткого нажатия.
+                          
                           segmentHighlightColor =
                               Colors.green.withValues(alpha: 0.26);
                         }

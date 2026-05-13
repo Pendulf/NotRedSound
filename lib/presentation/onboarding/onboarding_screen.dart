@@ -6,7 +6,7 @@ import 'package:path_provider/path_provider.dart';
 
 import '../../core/constants/app_constants.dart';
 import '../../core/styles/project_styles.dart';
-import 'launch_screen.dart';
+import '../launch/launch_screen.dart';
 
 class OnboardingStorage {
   static Future<File> _file() async {
@@ -69,15 +69,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.music_note_rounded,
       title: 'Что такое NotRedSound',
       description:
-          'Это мобильная музыкальная студия для создания треков прямо на телефоне: придумывай мелодии, пропевай их и наслаждайся своим произведением.',
+          'Это мобильная музыкальная студия для создания треков прямо на телефоне: придумывай мелодии, пропевай их и наслаждайся своим произведением',
       hint: '"Готовить может каждый!" – повар Огюст Гюсто из м/ф "Рататуй"',
       color: const Color.fromARGB(255, 249, 230, 58),
     ),
     _OnboardingPageData(
       icon: Icons.layers_rounded,
-      title: 'Выберай стиль',
+      title: 'Выбирай стиль',
       description:
-          'Свой, Рок, Электронный и Классический — это 4 отдельных проекта со своим оформлением и набором инструментов',
+          'Классический, Электро, Рок и Свой — это 4 отдельные версии проекта со своим оформлением и набором инструментов',
       hint: 'Стиль можно менять в настройках проекта нажатием на надпись “Проект”',
       color: ProjectStyles.standard.primaryColor,
     ),
@@ -85,7 +85,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.library_music_rounded,
       title: 'Добавляй дорожки',
       description:
-          'Создавай и удаляй дорожки, переименовывай их, меняй громкость, активность и инструмент.',
+          'Создавай и удаляй дорожки, переименовывай их, меняй громкость, активность и инструмент',
       hint: 'У Рока и Электро уже есть стартовые подписанные дорожки, а у Классики ещё и готовая композиция',
       color: ProjectStyles.rock.primaryColor,
     ),
@@ -93,7 +93,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.piano_rounded,
       title: 'Открывай редактор нот',
       description:
-          'Нажимай на предпоказ нот дорожки в нужном такте и открой редактор нот. Там можно записывать ноты голосом и затем редактировать их',
+          'Нажимай на предпоказ нот дорожки в нужном такте и открывай редактор нот. Там можно записывать ноты голосом и затем редактировать их',
       hint: 'Жёлтая лента и тактовая шкала помогут быстро ориентироваться',
       color: ProjectStyles.electro.primaryColor,
     ),
@@ -101,7 +101,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.play_circle_fill_rounded,
       title: 'Запускай и экспортируй',
       description:
-          'Если тебе нравится проделанная работа, то делись ей с друзьями',
+          'Наслаждайся полученным шедевром и делись своим искусством с друзьями',
       hint: 'Можно экспортировать трек в формате MIDI для доработки в профессиональной компьютерной программе',
       color: ProjectStyles.classic.primaryColor,
     ),

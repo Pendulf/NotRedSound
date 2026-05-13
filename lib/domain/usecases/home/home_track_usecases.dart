@@ -1,5 +1,5 @@
 import '../../../core/styles/project_style.dart';
-import '../../../data/models/track_model.dart';
+import '../../entities/track_model.dart';
 
 class HomeTrackUseCases {
   const HomeTrackUseCases._();
